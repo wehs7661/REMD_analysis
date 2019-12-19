@@ -1,0 +1,6 @@
+include LICENSE
+include MANIFEST.in
+include versioneer.py
+
+graft REMD_analysis
+global-exclude *.py[cod] __pycache__ *.so
