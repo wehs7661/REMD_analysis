@@ -22,7 +22,7 @@ except:
 setup(
     # Self-descriptive entries which should always be present
     name='REMD_analysis',
-    author='Wei-Tse',
+    author='Wei-Tse Hsu',
     author_email='wehs7661@colorado.edu',
     description=short_description[0],
     long_description=long_description,
@@ -43,6 +43,13 @@ setup(
 
     # Allows `setup.py test` to work correctly with pytest
     setup_requires=[] + pytest_runner,
+
+    # Add entry points
+    entry_points={
+        'console_scripts':[
+            'REMD_analysis = REMD_analysis.REMD_analysis:main'
+        ],
+    },
 
     # Additional entries you may want simply uncomment the lines you want and fill in the data
     # url='http://www.my_package.com',  # Website
