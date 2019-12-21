@@ -7,6 +7,27 @@ REMD_analysis
 
 `REMD_analysis` is a Python package of data analysis tools for replica exchange molecular dynamics (REMD) simulations.
 
+## Description
+`REMD_analysis` is a Python package of data analysis tools for replica exchange molecular dynamics (REMD) simulations.
+
+## Installation and Testing
+All the Python scripts in this package are written in Python 3. Currently the package can be installed by following the commands below:
+```
+git clone https://github.com/wehs7661/REMD_analysis.git
+cd REMD_analysis
+pip install -e .
+```
+To perform the unit tests and functional tests (still underdevelopment) of this package, run:
+```
+python test_REMD_analysis.py    ; unit tests
+python test_REMD_analysis.sh    ; functional tests
+```
+
+## Examples and Usage
+
+
+
+
 ### Copyright
 
 Copyright (c) 2019, Wei-Tse
