@@ -3,8 +3,10 @@ import sys
 import subprocess
 import argparse
 import numpy as np
+import seaborn as sns
 import matplotlib.pyplot as plt
 from matplotlib import rc
+from matplotlib import cm
 
 
 def initialize():
@@ -197,7 +199,7 @@ class REMDAnalysis(LogInfo):
             if (i + 1) > (n_rows - 1) * n_cols:
                 plt.xlabel('Time (ns)')
 
-            plt.ylim([0, self.N_states])
+            plt.ylim([0, self.N_states - 1])
             plt.grid()
 
         # Remove redundant subplots
@@ -208,53 +210,45 @@ class REMDAnalysis(LogInfo):
         plt.tight_layout(pad=5.0, w_pad=0.5, h_pad=2.0)
         plt.savefig(png_name, dpi=600)
         plt.show()
-
+    
     def plot_matrix(self, matrix, png_name):
+        sns.set_context(rc={
+        'family': 'sans-serif',
+        'sans-serif': ['DejaVu Sans'],
+        'size': 5
+        })
+
         K = len(matrix)
-        index = range(K)
-        fig = plt.figure(figsize=(K / 2, K / 2))
-        fig.add_subplot(111, frameon=False, xticks=[], yticks=[])
+        plt.figure(figsize=(K / 2, K / 2))
+        annot_matrix = np.zeros([K, K])   # matrix for annotating values
+
+        mask = []
+        for i in range(K):
+            mask.append([])
+            for j in range(len(matrix[0])):
+                if matrix[i][j] < 0.005:            
+                    mask[-1].append(True)
+                else:
+                    mask[-1].append(False)
 
         for i in range(K):
-            if i != 0:
-                plt.vlines(x=i, ymin=0, ymax=K, lw=0.5, color='k', alpha=0.25)
-                plt.hlines(y=i, xmin=0, xmax=K, lw=0.5, color='k', alpha=0.25)
             for j in range(K):
-                if matrix[j, i] < 0.005:
-                    v = ''   # value to be shown
-                elif matrix[j, i] > 0.995:
-                    v = '1.00'
-                else:
-                    v = ('%.2f' % matrix[j, i])[1:]
-                alf = matrix[j, i] / (matrix.max())   # for controlling alpha values
-                plt.fill_between([i, i + 1], [K - j, K - j], [K - (j + 1), K - (j + 1)], color='blue', alpha=alf)
+                annot_matrix[i, j] = round(matrix[i, j], 2)
 
-                # annotate the value of each element
-                plt.annotate(v, xy=(i, j), xytext=(i + 0.5, K - (j + 0.5)), size=8, textcoords='data',
-                             va='center', ha='center', color=('k' if alf < 0.5 else 'w'))
-
-            # labels of the state numbers
-            plt.annotate(index[i], xy=(i + 0.5, 1), xytext=(i + 0.5, K + 0.5), size=10,
-                         textcoords=('data', 'data'), va='center', ha='center', color='k')
-            plt.annotate(index[i], xy=(-0.5, K - (j + 0.5)), xytext=(-0.5, K - (i + 0.5)),
-                         size=10, textcoords=('data', 'data'), va='center', ha='center', color='k')
-        plt.annotate('$\lambda$', xy=(-0.5, K - (j + 0.5)), xytext=(-0.5, K + 0.5), size=14,
-                     textcoords=('data', 'data'), va='center', ha='center', color='k')
-
-        # frame of the plot
-        plt.plot([0, K], [0, 0], 'k-', lw=1.0, solid_capstyle='butt')
-        plt.plot([K, K], [0, K], 'k-', lw=1.0, solid_capstyle='butt')
-        plt.plot([0, 0], [0, K], 'k-', lw=1.0, solid_capstyle='butt')
-        plt.plot([0, K], [K, K], 'k-', lw=1.0, solid_capstyle='butt')
-
-        plt.xlim(0, K)
-        plt.ylim(0, K)
-        plt.annotate('Transition matrix', xy=(K / 2, K + 1.5), xytext=(K / 2, K + 1.8), size=10,
-                     weight='heavy', textcoords=('data', 'data'), va='center', ha='center', color='k')
-        plt.axis('scaled')
+        ax = sns.heatmap(matrix, cmap="YlGnBu", linecolor='silver', linewidth=0.25, 
+                        annot=annot_matrix, square=True, mask=mask, fmt='.2f', cbar=False)
+        ax.xaxis.tick_top()
+        ax.tick_params(length=0)
+        cmap = cm.get_cmap('YlGnBu')   # to get the facecolor
+        ax.set_facecolor(cmap(0))      # use the brightest color (value = 0)
+        for _, spine in ax.spines.items():
+            spine.set_visible(True)    # add frames to the heat map
+        plt.annotate('$\lambda$', xy=(0, 0), xytext=(-0.45, -0.20))
+        plt.title('Transition matrix', fontsize=14, weight='bold')
 
         plt.savefig(png_name, dpi=600)
         plt.show()
+
 
     def get_overlap_matrix():
         # this matrix can be obtained only if MBAR is used
