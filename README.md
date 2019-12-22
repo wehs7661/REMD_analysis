@@ -5,8 +5,6 @@ REMD_analysis
 [![AppVeyor Build status](https://ci.appveyor.com/api/projects/status/REPLACE_WITH_APPVEYOR_LINK/branch/master?svg=true)](https://ci.appveyor.com/project/REPLACE_WITH_OWNER_ACCOUNT/REMD_analysis/branch/master)
 [![codecov](https://codecov.io/gh/REPLACE_WITH_OWNER_ACCOUNT/REMD_analysis/branch/master/graph/badge.svg)](https://codecov.io/gh/REPLACE_WITH_OWNER_ACCOUNT/REMD_analysis/branch/master)
 
-`REMD_analysis` is a Python package of data analysis tools for replica exchange molecular dynamics (REMD) simulations.
-
 ## Description
 `REMD_analysis` is a Python package of data analysis tools for replica exchange molecular dynamics (REMD) simulations.
 

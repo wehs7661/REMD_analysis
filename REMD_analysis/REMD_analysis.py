@@ -2,9 +2,10 @@ import os
 import sys
 import subprocess
 import argparse
-import numpy as np 
-import matplotlib.pyplot as plt 
+import numpy as np
+import matplotlib.pyplot as plt
 from matplotlib import rc
+
 
 def initialize():
     parser = argparse.ArgumentParser(
@@ -19,10 +20,11 @@ def initialize():
                         '--prefix',
                         type=str,
                         help='The common prefix of the simulation files.')
-    
+
     args_parse = parser.parse_args()
 
     return args_parse
+
 
 class LogInfo:
     def __init__(self, logfile):
@@ -40,26 +42,35 @@ class LogInfo:
         f.close()
 
         self.nex = None
+        self.replex = None
         self.N_states = None
+        self.dt = None
 
         line_n = 0
         for l in lines:
             line_n += 1
+
+            if 'dt  ' in l and self.dt is None:
+                self.dt = float(l.split('=')[1])
+
             if 'Command line' in l:
-                if 'nex' in lines[line_n + 1]:
+                if 'nex' in lines[line_n]:
                     self.nex = True
                 else:
                     self.nex = False
 
+                if 'replex' in lines[line_n]:
+                    self.replex = float(lines[line_n].split('replex')[1].split()[0])
+
             if 'Replica exchange in ' in l:
                 self.N_states = len(lines[line_n].split())
-            
+
             if 'Started mdrun' in l:
                 self.start = line_n
                 # the line number that the simulation got started
                 break
 
-            
+
 class REMDAnalysis(LogInfo):
     """
     A class for state-time analysis of replica exchange molecular dynamics simulations. When
@@ -75,12 +86,12 @@ class REMDAnalysis(LogInfo):
         self.n_ex = 0        # number of exchanges
         LogInfo.__init__(self, logfile)
 
-    def get_transition_matrix(self, logfile):
+    def get_replica_data(self, logfile):
         """
-        Gets the data of the transition matrix from the log file. Note that according 
-        to the log file in GROMACS, index (i, j) in the transition matrix represents 
-        the number of exchanges "BETWEEN SPOT i AND j" divided the total number of 
-        exchanges.
+        Gets the data of of each replica from the log file, including the state-time 
+        data and transition matrix. Note that according to the log file in GROMACS, 
+        index (i, j) in the transition matrix represents the number of exchanges 
+        "BETWEEN SPOT i AND j" divided the total number of exchanges.
 
         Parameters
         ----------
@@ -93,17 +104,37 @@ class REMDAnalysis(LogInfo):
             The transition matrix.
         """
 
-        # Use external shell command to search the string would be faster
-        try:
-            subprocess.check_output("grep 'Replica exchange statistics' %s" % logfile, shell=True)
-            self.finish = True
-        except:
-            # An error would occur if the string is not found
-            self.finish = False
-
         f = open(logfile, 'r')
         lines = f.readlines()
         f.close()
+
+        # Part 1: Get state-time data
+        line_n = 0
+        state_data = []
+        for i in range(self.N_states):
+            # data_all[i] represents the states that replica i has visited
+            state_data.append([])
+            state_data[i].append(i)
+
+        for l in lines[self.start:]:
+            line_n += 1
+            if 'Order After Exchange' in l:
+                self.n_ex += 1
+                state_list = [int(i) for i in l.split(':')[1].split()]
+                for i in range(self.N_states):
+                    state_data[i].append(state_list.index(i))
+
+        final_time = self.n_ex * self.replex * self.dt  # units: ps
+        time = np.linspace(0, final_time, self.n_ex + 1)
+
+        # Part 2: Get the data of transition matrix
+        try:
+            # Use external shell command to search the string would be faster
+            subprocess.check_output("grep 'Replica exchange statistics' %s" % logfile, shell=True)
+            self.finish = True
+        except:
+            # Handle the error which would occur if the string is not found
+            self.finish = False
 
         line_n = 0
         count_matrix = np.zeros([self.N_states, self.N_states])
@@ -119,7 +150,8 @@ class REMDAnalysis(LogInfo):
                 if 'Replica exchange statistics' in l:
                     # data starts from lines[line_n - 5]
                     for i in range(self.N_states):
-                        transition_matrix[i] = [float(v) for v in lines[line_n - 5 - i].split('Repl')[1].split()[:self.N_states]]
+                        transition_matrix[i] = [float(v) for v in lines[line_n - 5 -
+                                                                        i].split('Repl')[1].split()[:self.N_states]]
 
         if self.finish is False:
             # Then we have to calculate overlap matrix on our own as follows.
@@ -127,7 +159,7 @@ class REMDAnalysis(LogInfo):
                 line_n += 1
                 if 'Accepted Exchanges' in l:
                     self.n_ex += 1
-                    rep_list =[int(i) for i in l.split(':')[1].split()]
+                    rep_list = [int(i) for i in l.split(':')[1].split()]
                     for i in rep_list:
                         # Note that for the diagnal: count_matrix[i, i] += 2
                         count_matrix[i, rep_list.index(i)] += 1
@@ -138,12 +170,49 @@ class REMDAnalysis(LogInfo):
                 for j in range(self.N_states):
                     transition_matrix[i, j] = count_matrix[i, j] / sum(count_matrix[i])
 
-        return transition_matrix
+        return time, state_data, transition_matrix
+
+    def plot_state_data(self, time, state_data, png_name):
+        if int(np.sqrt(self.N_states) + 0.5) ** 2 == self.N_states:
+            # perfect sqaure number
+            n_cols = int(np.sqrt(self.N_states))
+        else:
+            n_cols = int(np.floor(np.sqrt(self.N_states))) + 1
+
+        if self.N_states % n_cols == 0:
+            n_rows = int(self.N_states / n_cols)
+        else:
+            n_rows = int(np.floor(self.N_states / n_cols)) + 1
+
+        _, ax = plt.subplots(nrows=n_rows, ncols=n_cols, figsize=(2.5 * n_cols, 2.5 * n_rows))
+        plt.suptitle('Exploration of states as a function of time', weight='bold', fontsize=14)
+
+        for i in range(self.N_states):
+            plt.subplot(n_rows, n_cols, i + 1)
+            plt.plot(np.array(time) / 1000, state_data[i])
+            plt.annotate('(Replica %s)' % i, xy=(0, 0), xytext=(0, self.N_states * 0.05))
+
+            if (i + 1) % n_cols == 1:
+                plt.ylabel('State')
+            if (i + 1) > (n_rows - 1) * n_cols:
+                plt.xlabel('Time (ns)')
+
+            plt.ylim([0, self.N_states])
+            plt.grid()
+
+        # Remove redundant subplots
+        n_rm = n_cols * n_rows - self.N_states
+        for i in range(n_rm):
+            ax.flat[-1 * (i + 1)].set_visible(False)
+
+        plt.tight_layout(pad=5.0, w_pad=0.5, h_pad=2.0)
+        plt.savefig(png_name, dpi=600)
+        plt.show()
 
     def plot_matrix(self, matrix, png_name):
-        K = self.N_states
+        K = len(matrix)
         index = range(K)
-        fig = plt.figure(figsize=(K / 2 , K / 2))
+        fig = plt.figure(figsize=(K / 2, K / 2))
         fig.add_subplot(111, frameon=False, xticks=[], yticks=[])
 
         for i in range(K):
@@ -151,22 +220,26 @@ class REMDAnalysis(LogInfo):
                 plt.vlines(x=i, ymin=0, ymax=K, lw=0.5, color='k', alpha=0.25)
                 plt.hlines(y=i, xmin=0, xmax=K, lw=0.5, color='k', alpha=0.25)
             for j in range(K):
-                if matrix[j, i] < 0.005:  
-                    v = ''   # value to be shown 
+                if matrix[j, i] < 0.005:
+                    v = ''   # value to be shown
                 elif matrix[j, i] > 0.995:
                     v = '1.00'
                 else:
                     v = ('%.2f' % matrix[j, i])[1:]
                 alf = matrix[j, i] / (matrix.max())   # for controlling alpha values
-                plt.fill_between([i, i + 1], [K - j, K -j], [K - (j + 1), K - (j + 1)], color='blue', alpha=alf) 
-                
+                plt.fill_between([i, i + 1], [K - j, K - j], [K - (j + 1), K - (j + 1)], color='blue', alpha=alf)
+
                 # annotate the value of each element
-                plt.annotate(v, xy=(i, j), xytext=(i + 0.5, K - (j + 0.5)), size=8, textcoords='data', va='center', ha='center', color=('k' if alf < 0.5 else 'w'))
-                
+                plt.annotate(v, xy=(i, j), xytext=(i + 0.5, K - (j + 0.5)), size=8, textcoords='data',
+                             va='center', ha='center', color=('k' if alf < 0.5 else 'w'))
+
             # labels of the state numbers
-            plt.annotate(index[i], xy=(i + 0.5, 1), xytext=(i + 0.5, K + 0.5), size=10, textcoords=('data', 'data'), va='center', ha='center', color='k')
-            plt.annotate(index[i], xy=(-0.5, K - (j + 0.5)), xytext=(-0.5, K - ( i + 0.5)), size=10, textcoords=('data', 'data'), va='center', ha='center', color='k')
-        plt.annotate('$\lambda$', xy=(-0.5, K - (j + 0.5)), xytext=(-0.5, K + 0.5), size=14, textcoords=('data', 'data'), va='center', ha='center', color='k')
+            plt.annotate(index[i], xy=(i + 0.5, 1), xytext=(i + 0.5, K + 0.5), size=10,
+                         textcoords=('data', 'data'), va='center', ha='center', color='k')
+            plt.annotate(index[i], xy=(-0.5, K - (j + 0.5)), xytext=(-0.5, K - (i + 0.5)),
+                         size=10, textcoords=('data', 'data'), va='center', ha='center', color='k')
+        plt.annotate('$\lambda$', xy=(-0.5, K - (j + 0.5)), xytext=(-0.5, K + 0.5), size=14,
+                     textcoords=('data', 'data'), va='center', ha='center', color='k')
 
         # frame of the plot
         plt.plot([0, K], [0, 0], 'k-', lw=1.0, solid_capstyle='butt')
@@ -176,27 +249,20 @@ class REMDAnalysis(LogInfo):
 
         plt.xlim(0, K)
         plt.ylim(0, K)
-        plt.annotate('Transition matrix', xy=(K / 2, K + 1.5), xytext=(K / 2, K + 1.8), size=10, weight='heavy', textcoords=('data', 'data'), va='center', ha='center', color='k')
+        plt.annotate('Transition matrix', xy=(K / 2, K + 1.5), xytext=(K / 2, K + 1.8), size=10,
+                     weight='heavy', textcoords=('data', 'data'), va='center', ha='center', color='k')
         plt.axis('scaled')
 
         plt.savefig(png_name, dpi=600)
         plt.show()
 
-    def get_state_time(self, logfile):
-        pass
-
-
-
-
     def get_overlap_matrix():
         # this matrix can be obtained only if MBAR is used
         pass
 
-
         #f = open(log, 'r')
         #lines = f.readlines()
-        #f.close()
-
+        # f.close()
 
 
 def main():
@@ -214,7 +280,7 @@ def main():
     if args.log is None:
         for file in os.listdir('.'):
             if file.endswith('.log'):
-                args.log = file 
+                args.log = file
         if args.log is None:
             print('No log files provided or found! Please check if the dirctory is correct or specify the name of the log file.')
             sys.exit()
@@ -223,8 +289,6 @@ def main():
         args.prefix = args.log.split('.')[0]
 
     RA = REMDAnalysis(args.log)
-    t_matrix = RA.get_transition_matrix(args.log)
+    time, state, t_matrix = RA.get_replica_data(args.log)
+    RA.plot_state_data(time, state, 'state_time_%s.png' % args.prefix)
     RA.plot_matrix(t_matrix, 'transition_matrix_%s.png' % args.prefix)
-
-
-        
