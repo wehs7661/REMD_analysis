@@ -1,5 +1,6 @@
 import os
 import sys
+import time as timer
 import subprocess
 import argparse
 import numpy as np
@@ -86,6 +87,7 @@ class REMDAnalysis(LogInfo):
         self.sample_all = None
         self.finish = None   # if the simulation finishes all the steps specified
         self.n_ex = 0        # number of exchanges
+        self.final_t = None
         LogInfo.__init__(self, logfile)
 
     def get_replica_data(self, logfile):
@@ -126,8 +128,8 @@ class REMDAnalysis(LogInfo):
                 for i in range(self.N_states):
                     state_data[i].append(state_list.index(i))
 
-        final_time = self.n_ex * self.replex * self.dt  # units: ps
-        time = np.linspace(0, final_time, self.n_ex + 1)
+        self.final_t = self.n_ex * self.replex * self.dt  # units: ps
+        time = np.linspace(0, self.final_t, self.n_ex + 1)
 
         # Part 2: Get the data of transition matrix
         try:
@@ -160,7 +162,6 @@ class REMDAnalysis(LogInfo):
             for l in lines[self.start:]:  # skip the metadata
                 line_n += 1
                 if 'Accepted Exchanges' in l:
-                    self.n_ex += 1
                     rep_list = [int(i) for i in l.split(':')[1].split()]
                     for i in rep_list:
                         # Note that for the diagnal: count_matrix[i, i] += 2
@@ -209,7 +210,7 @@ class REMDAnalysis(LogInfo):
 
         plt.tight_layout(pad=5.0, w_pad=0.5, h_pad=2.0)
         plt.savefig(png_name, dpi=600)
-        plt.show()
+        # plt.show()
     
     def plot_matrix(self, matrix, png_name):
         sns.set_context(rc={
@@ -245,9 +246,10 @@ class REMDAnalysis(LogInfo):
             spine.set_visible(True)    # add frames to the heat map
         plt.annotate('$\lambda$', xy=(0, 0), xytext=(-0.45, -0.20))
         plt.title('Transition matrix', fontsize=14, weight='bold')
+        plt.tight_layout(pad=1.0)
 
         plt.savefig(png_name, dpi=600)
-        plt.show()
+        # plt.show()
 
 
     def get_overlap_matrix():
@@ -260,6 +262,8 @@ class REMDAnalysis(LogInfo):
 
 
 def main():
+    start = timer.time()
+
     rc('font', **{
         'family': 'sans-serif',
         'sans-serif': ['DejaVu Sans'],
@@ -282,7 +286,22 @@ def main():
     if args.prefix is None:
         args.prefix = args.log.split('.')[0]
 
+    result_str = '\nData analysis of the file %s:' % args.log
+    print(result_str)
+    print('=' * (len(result_str) - 1))  # len(result_str) includes \n 
+    
+    print('Analyzing the log file ...')
     RA = REMDAnalysis(args.log)
     time, state, t_matrix = RA.get_replica_data(args.log)
+    print('Simulation length: %s ns (%s exchanges occured.)\n' % (RA.final_t / 1000, RA.n_ex))
+    
+    print('Plotting the exploration of states as a function of time ...')
     RA.plot_state_data(time, state, 'state_time_%s.png' % args.prefix)
+    print('The state time plot, state_time_%s.png, has been geneated.\n' % args.prefix)
+
+    print('Plotting the transition matrix as a heat map ...')
     RA.plot_matrix(t_matrix, 'transition_matrix_%s.png' % args.prefix)
+    print('The heat map of the transition matrix, transition_matrix_%s.png, has been generated.\n' % args.prefix)
+
+    end = timer.time()
+    print('Total time elasped: %s seconds.\n' % (end - start))
