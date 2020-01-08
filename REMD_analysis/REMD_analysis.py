@@ -1,5 +1,6 @@
 import os
 import sys
+import pymbar
 import time as timer
 import subprocess
 import argparse
@@ -82,7 +83,7 @@ class REMDAnalysis(LogInfo):
 
     def __init__(self, logfile):
         """
-        Sets up the properties of the instance of EXEAnalysis
+        Sets up the properties of the instance of REMDAnalysis
         """
         self.sample_all = None
         self.finish = None   # if the simulation finishes all the steps specified
@@ -250,6 +251,34 @@ class REMDAnalysis(LogInfo):
 
         plt.savefig(png_name, dpi=600)
         # plt.show()
+
+
+class MBARAnalysis(REMDAnalysis):
+    """
+    A class using MBAR to perform free energy calculations.
+    """
+
+    def __init__(self, logfile):
+        """
+        Sets up the properties of the instance of MBARAnalysis
+        """
+        LogInfo.__init__(self, logfile)
+        REMDAnalysis.__init__(self, logfile)
+
+    def decorrelate_data(self, start, end):
+        K = self.N_states
+        u_kln = np.zeros([K, K, max(end-start), np.float64])
+        N_k = np.zeros(K, int)  # the number of uncorrelated samples from state k
+        g = np.zeros(K, float)  # correlation times for the data
+        
+
+
+
+
+
+
+
+
 
 
     def get_overlap_matrix():

@@ -80,13 +80,35 @@ Total time elasped: 35.507400035858154 seconds.
 To get more realized about the theory and the implmentation of replica exchange simulation, we recommend the following materials:
 
 - Tutorials
+  - A tutorial provided on GROMACS
 - Literature (provided in the folder `REMD_analysis/papers`)
   - Temperature replica exchange
+    - Parallel tempering: Theory, applications, and new perspectives
   - Hamiltonian replica exchange
+    - A Novel Hamiltonian Replica Exchange MD Protocol to Enhance Protein Conformational Space Sampling
+    - Free Energy Perturbation Hamiltonian Replica-Exchange Molecular Dynamics (FEP/H-REMD) for Absolute Ligand Binding Free Energy Calculations
+    - Hamiltonian replica exchange molecular dynamics using soft-core interactions
   - Optimization of replica exchange simulations
+    - Exchange Often and Properly In Replica Exchange Molecular Dynamics
+    - A temperature predictor for parallel tempering simulations
+    - Minimizing thermodyanmic length to select intermediate states for free-energy calculations and replica-exchange simulations
+    - Optimal allocation of replicas in parallel tempering simulations
+    - On-line Optimization of Hamiltonian Replica Exchange Simulations
+    - Optimization of Umbrella Sampling Replica Exchange Molecular Dynamics by Replica Positioning
+  - Assessment of replica exchange simulations
+    - Strength and weakness of parallel tempering
+    - Convergence and sampling efficiency in replica exchange simulations of peptide folding in explicit solvent
+    -  How Efficient Is Replica Exchange Molecular Dynamics? An Analytic Approach
   - Multistate Bennett Acceptance Ratio (MBAR)
-
-
+  - Applications of replica exchange simulations
+    - Ensemble-Based Replica Exchange Alchemical Free Energy Methods: The effect of Protein Mutations on Inhibotor Binding
+    - Efficient Sampling and Characterization of Free Energy Landscapes of Ion-Peptide Systems
+  - Variations of replica exchange molecular dynamics
+    - Enhanced Conformational Sampling Using Replica Exchange with Collective-Variable Tempering
+    - Multidimensional replica-exchange method for free-energy calculations
+    - Replica-exchange multicanonical algorithm and multicanonical replica-exchange method for simulating systems with rough-energy landscape
+    - Adaptive Biasing Combined with Hamiltonian Replica Exchange to Improve Umbrella Sampling Free Energy Simulations
+   
 ## Copyright
 
 Copyright (c) 2019, Wei-Tse
