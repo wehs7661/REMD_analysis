@@ -1,9 +1,11 @@
 import os
 import sys
+import glob
 import pymbar
 import time as timer
 import subprocess
 import argparse
+import natsort
 import numpy as np
 import seaborn as sns
 import matplotlib.pyplot as plt
@@ -19,6 +21,7 @@ def initialize():
     parser.add_argument('-l',
                         '--log',
                         type=str,
+                        nargs='+',
                         help='The file name of the log file.')
     parser.add_argument('-p',
                         '--prefix',
@@ -31,17 +34,18 @@ def initialize():
 
 
 class LogInfo:
-    def __init__(self, logfile):
+    def __init__(self, logfiles):
         """
         Gets the needed parameters and data from the log file and set up
         relevant attributes to run the analysis
 
         Parameters
         ----------
-        logfile : str
-            The filename of the log file
+        logfiles : list
+            A list of the filenames of log files
         """
-        f = open(logfile, 'r')
+        # the info from all th log files should be the same
+        f = open(logfiles[0], 'r')
         lines = f.readlines()
         f.close()
 
@@ -78,10 +82,10 @@ class LogInfo:
 class REMDAnalysis(LogInfo):
     """
     A class for state-time analysis of replica exchange molecular dynamics simulations. When
-    instantiating this class, one parameter (logfile) is required.
+    instantiating this class, one parameter (logfiles) is required.
     """
 
-    def __init__(self, logfile):
+    def __init__(self, logfiles):
         """
         Sets up the properties of the instance of REMDAnalysis
         """
@@ -89,9 +93,9 @@ class REMDAnalysis(LogInfo):
         self.finish = None   # if the simulation finishes all the steps specified
         self.n_ex = 0        # number of exchanges
         self.final_t = None
-        LogInfo.__init__(self, logfile)
+        LogInfo.__init__(self, logfiles)
 
-    def get_replica_data(self, logfile):
+    def get_replica_data(self, logfiles):
         """
         Gets the data of of each replica from the log file, including the state-time 
         data and transition matrix. Note that according to the log file in GROMACS, 
@@ -100,8 +104,8 @@ class REMDAnalysis(LogInfo):
 
         Parameters
         ----------
-        logfile : str
-            The name of the log file to read.
+        logfiles : list
+            A list of the names of log files
 
         Returns
         -------
@@ -109,46 +113,51 @@ class REMDAnalysis(LogInfo):
             The transition matrix.
         """
 
-        f = open(logfile, 'r')
-        lines = f.readlines()
-        f.close()
+        for k in range(len(logfiles)):
+            f = open(logfiles[k], 'r')
+            lines = f.readlines()
+            f.close()
 
-        # Part 1: Get state-time data
-        line_n = 0
-        state_data = []
-        for i in range(self.N_states):
-            # data_all[i] represents the states that replica i has visited
-            state_data.append([])
-            state_data[i].append(i)
-
-        for l in lines[self.start:]:
-            line_n += 1
-            if 'Order After Exchange' in l:
-                self.n_ex += 1
-                state_list = [int(i) for i in l.split(':')[1].split()]
+            # Part 1: Get state-time data
+            line_n = 0
+            
+            if k == 0:
+                state_data = []
                 for i in range(self.N_states):
-                    state_data[i].append(state_list.index(i))
+                    # data_all[i] represents the states that replica i has visited
+                    state_data.append([])
+                    state_data[i].append(i)
 
+            for l in lines[self.start:]:
+                line_n += 1
+                if 'Order After Exchange' in l:
+                    self.n_ex += 1   # this will accumulate across iterations
+                    state_list = [int(i) for i in l.split(':')[1].split()]
+                    for i in range(self.N_states):
+                        state_data[i].append(state_list.index(i))
+        
+        # for state-time plotting
         self.final_t = self.n_ex * self.replex * self.dt  # units: ps
         time = np.linspace(0, self.final_t, self.n_ex + 1)
 
         # Part 2: Get the data of transition matrix
         try:
             # Use external shell command to search the string would be faster
-            subprocess.check_output("grep 'Replica exchange statistics' %s" % logfile, shell=True)
+            subprocess.check_output("grep 'Replica exchange statistics' %s" % logfiles[-1], shell=True)
             self.finish = True
         except:
             # Handle the error which would occur if the string is not found
             self.finish = False
 
-        line_n = 0
         count_matrix = np.zeros([self.N_states, self.N_states])
         transition_matrix = np.zeros([self.N_states, self.N_states])
 
         if self.finish is True:
             # Then read from the bottom to get the overlap matrix
             # (since if the simulation is finished, the overlap matrix will be calculated automatically)
+            # lines here are from the last logfile
             lines.reverse()    # from this point, lines has been reverse
+            line_n = 0
             for l in lines:
                 # print(l)    # this will print from the bottom
                 line_n += 1
@@ -160,14 +169,20 @@ class REMDAnalysis(LogInfo):
 
         if self.finish is False:
             # Then we have to calculate overlap matrix on our own as follows.
-            for l in lines[self.start:]:  # skip the metadata
-                line_n += 1
-                if 'Accepted Exchanges' in l:
-                    rep_list = [int(i) for i in l.split(':')[1].split()]
-                    for i in rep_list:
-                        # Note that for the diagnal: count_matrix[i, i] += 2
-                        count_matrix[i, rep_list.index(i)] += 1
-                        count_matrix[rep_list.index(i), i] += 1
+            for k in range(len(logfiles)):
+                f = open(logfiles[k], 'r')
+                lines = f.readlines()
+                f.close()
+
+                line_n = 0
+                for l in lines[self.start:]:  # skip the metadata
+                    line_n += 1
+                    if 'Accepted Exchanges' in l:
+                        rep_list = [int(i) for i in l.split(':')[1].split()]
+                        for i in rep_list:
+                            # Note that for the diagnal: count_matrix[i, i] += 2
+                            count_matrix[i, rep_list.index(i)] += 1
+                            count_matrix[rep_list.index(i), i] += 1
 
             # get transition_matrix from the data of count_matrix
             for i in range(self.N_states):
@@ -272,15 +287,6 @@ class MBARAnalysis(REMDAnalysis):
         g = np.zeros(K, float)  # correlation times for the data
         
 
-
-
-
-
-
-
-
-
-
     def get_overlap_matrix():
         # this matrix can be obtained only if MBAR is used
         pass
@@ -305,17 +311,30 @@ def main():
     args = initialize()
 
     if args.log is None:
+        args.log = []
         for file in os.listdir('.'):
             if file.endswith('.log'):
-                args.log = file
-        if args.log is None:
+                args.log.append(file)
+        if not args.log:
             print('No log files provided or found! Please check if the dirctory is correct or specify the name of the log file.')
             sys.exit()
+        else:
+            args.log = natsort.natsorted(args.log, reverse=False)
 
     if args.prefix is None:
-        args.prefix = args.log.split('.')[0]
+        args.prefix = args.log[0].split('.')[0]
 
-    result_str = '\nData analysis of the file %s:' % args.log
+    log_str = ''
+    for i in range(len(args.log)):
+        log_str += args.log[i]
+        if i == len(args.log) - 2:
+            log_str += ', and '
+        elif i == len(args.log) - 1:
+            pass
+        else:
+            log_str += ', '
+
+    result_str = '\nData analysis of the file(s): %s' % log_str
     print(result_str)
     print('=' * (len(result_str) - 1))  # len(result_str) includes \n 
     
