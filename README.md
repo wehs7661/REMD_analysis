@@ -23,8 +23,8 @@ python test_REMD_analysis.sh    ; functional tests
 
 ## Usage
 
-### 1. Prepartion of simulation input files 
-This package provides a simple way to prepare simulations input files (such as `.mdp` and `.tpr` files for each replica) for Hamiltonian replica exchange simulations and submitting jobs to Summit or Bridges. By running the command `bash HREMD.sh`, the following promopts will be invoked for the user to specify relevant paramters:
+### 1. `HREMD_prep.sh`: Prepartion of simulation input files 
+This code provides a simple way to prepare simulations input files (such as `.mdp` and `.tpr` files for each replica) for Hamiltonian replica exchange simulations given the common `.gro`, `.top`, `.ndx` files and a template `.mdp file`. It also submits jobs to Summit or Bridges (user-defined). By running the command `bash HREMD_prep.sh`, the following promopts will be invoked for the user to specify relevant paramters:
 ```
 This shell script prepares all the files needed to run a Hamiltonian replica exchange including .mdp files and .tpr files, given the common .gro file and a template .mdp file. A job submission script will also be generated.
 Please input the name of the job: 
@@ -110,7 +110,7 @@ To get more realized about the theory and the implmentation of replica exchange 
    
 ## Copyright
 
-Copyright (c) 2019, Wei-Tse
+Copyright (c) 2019, Wei-Tse (wehs7661@colorado.edu)
 
 
 ## Acknowledgements

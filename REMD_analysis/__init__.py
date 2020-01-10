@@ -5,6 +5,7 @@ REMD_analysis
 
 # Add imports here
 from .REMD import *
+from .REMD_analysis import *
 
 # Handle versioneer
 from ._version import get_versions
