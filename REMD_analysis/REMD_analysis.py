@@ -191,7 +191,7 @@ class REMDAnalysis(LogInfo):
 
         return time, state_data, transition_matrix
 
-    def plot_state_data(self, time, state_data, png_name):
+    def plot_state_data(self, time, state_data, diag, png_name):
         if int(np.sqrt(self.N_states) + 0.5) ** 2 == self.N_states:
             # perfect sqaure number
             n_cols = int(np.sqrt(self.N_states))
@@ -209,7 +209,8 @@ class REMDAnalysis(LogInfo):
         for i in range(self.N_states):
             plt.subplot(n_rows, n_cols, i + 1)
             plt.plot(np.array(time) / 1000, state_data[i])
-            plt.annotate('(Replica %s)' % i, xy=(0, 0), xytext=(0, self.N_states * 0.05))
+            # r = probability of staying at the original state
+            plt.annotate('(Replica %s, r = %s%%)' % (i, diag[i]), xy=(0, 0), xytext=(0, self.N_states * 0.05))
 
             if (i + 1) % n_cols == 1:
                 plt.ylabel('State')
@@ -227,6 +228,7 @@ class REMDAnalysis(LogInfo):
         plt.tight_layout(pad=5.0, w_pad=0.5, h_pad=2.0)
         plt.savefig(png_name, dpi=600)
         # plt.show()
+        plt.close()
     
     def plot_matrix(self, matrix, png_name):
         sns.set_context(rc={
@@ -266,7 +268,7 @@ class REMDAnalysis(LogInfo):
 
         plt.savefig(png_name, dpi=600)
         # plt.show()
-
+        plt.close()
 
 class MBARAnalysis(REMDAnalysis):
     """
@@ -341,15 +343,30 @@ def main():
     print('Analyzing the log file ...')
     RA = REMDAnalysis(args.log)
     time, state, t_matrix = RA.get_replica_data(args.log)
+    # the probability of staying at the original state
+    diag = np.round(100 * np.diagonal(t_matrix), 1)   
+
     print('Simulation length: %s ns (%s exchanges occured.)\n' % (RA.final_t / 1000, RA.n_ex))
     
     print('Plotting the exploration of states as a function of time ...')
-    RA.plot_state_data(time, state, 'state_time_%s.png' % args.prefix)
+    RA.plot_state_data(time, state, diag, 'state_time_%s.png' % args.prefix)
     print('The state time plot, state_time_%s.png, has been geneated.\n' % args.prefix)
 
     print('Plotting the transition matrix as a heat map ...')
     RA.plot_matrix(t_matrix, 'transition_matrix_%s.png' % args.prefix)
     print('The heat map of the transition matrix, transition_matrix_%s.png, has been generated.\n' % args.prefix)
+
+    print('Plotting the histogram of the diagonal transition probability ...')
+    plt.figure()
+    plt.hist(diag, bins=20, edgecolor='black')
+    plt.xlabel('Probability of staying at the original state (%)')
+    plt.ylabel('Count of states')
+    plt.title('Histogram of the diagonal transition probaility')
+    plt.grid()
+    plt.savefig('hist_diag_%s.png' % args.prefix, dpi=600)
+    # plt.show()
+    plt.close()
+    print('The histogram of the diagonal transition probability, hist_diag_%s.png, has been generated.\n' % args.prefix)
 
     end = timer.time()
     print('Total time elasped: %s seconds.\n' % (end - start))
