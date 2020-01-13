@@ -39,7 +39,7 @@ install:
   - conda activate test
     # Build and install package
   - python setup.py develop --no-deps
-
+  - conda install -c omnia pymbar
 
 script:
   - pytest -v --cov=REMD_analysis REMD_analysis/tests/
