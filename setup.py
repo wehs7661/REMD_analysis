@@ -47,7 +47,8 @@ setup(
     # Add entry points
     entry_points={
         'console_scripts':[
-            'REMD_analysis = REMD_analysis.REMD_analysis:main'
+            'REMD_analysis = REMD_analysis.REMD_analysis:main',
+            'REMD_conf_prep = REMD_analysis.REMD_conf_prep:main'
         ],
     },
 

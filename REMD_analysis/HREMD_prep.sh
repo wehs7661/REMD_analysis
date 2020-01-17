@@ -8,6 +8,7 @@ read -p "Please input the number of replicas: " N
 read -p "Please input the number of requested nodes: " nodes
 read -p "Please input the simulation time (in hour): " simutime
 read -p "Will the job be submitted to Summit or Bridges? " HPC
+read -p "Are the configurations for different states the same? (yes/no) " conf 
 
 if [ ${HPC} == "Summit" ] || [ ${HPC} == "summit" ]
 then
@@ -20,17 +21,27 @@ else
     echo "Wrong selected HPC. Available options are Summit and Bridges."
 fi
 
-echo Preparing the files needed for the Hamiltonian rpelica exchange ...
+
+echo Preparing the files needed for the Hamiltonian replica exchange ...
 
 for (( i=0; i<$N; i=i+1 ))
 do 
-    mkdir state_${i}
-    cp *gro *top *ndx state_${i}
+    if [ ${conf} == "yes" ]
+    then
+        mkdir state_${i}
+        cp *gro *top *ndx state_${i}
+    elif [ ${conf} == "no" ]
+    then
+        cp *top *ndx state_${i}
+    else
+        echo "Bad input for the last question: Are the configurations for different states the same? (yes/no). "
+    fi
     cp *template.mdp state_${i}/${name}_restr4_${i}.mdp
     sed -i -e "s/init-lambda-state        = X/init-lambda-state        = ${i}/g" state_${i}/${name}_restr4_${i}.mdp
     cd state_${i}
     gmx_mpi grompp -f ${name}_restr4_${i}.mdp -c ${name}.gro -p ${name}.top -n ${name}.ndx -o ${name}.tpr -maxwarn 4
     cd ../
+    
 done
 
 echo Writing job submission script and submitting the job ...

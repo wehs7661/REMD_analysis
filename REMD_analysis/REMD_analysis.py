@@ -63,9 +63,9 @@ class LogInfo:
 
             if 'Command line' in l:
                 if 'nex' in lines[line_n]:
-                    self.nex = True
+                    self.nex = True  
                 else:
-                    self.nex = False
+                    self.nex = False            
 
                 if 'replex' in lines[line_n]:
                     self.replex = float(lines[line_n].split('replex')[1].split()[0])
