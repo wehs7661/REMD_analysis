@@ -110,7 +110,7 @@ mpirun -np {N} gmx_mpi mdrun -deffnm {prefix} -dhdl {prefix}_dhdl.xvg -replex 10
 #SBATCH -t {simutime}:00:00
 #SBATCH --ntasks-per-node={task-per-nodes}
 
-module load gromacs/2018_gpu
+module load gromacs/2018_cpu
 module load mpi/intel_mpi
 
 # export OMP_NUM_THREADS=24
