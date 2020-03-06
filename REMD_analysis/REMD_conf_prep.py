@@ -6,7 +6,7 @@ the correlation time. For example, the initial configuration for the simulation 
 replica 40 should be a configuration having lambda values corresponding to replica 40.
 Given the log file from a simulation which samples different intermediate states (EXE
 or REMD simulation) and the corresponding tpr, xtc files, this Python code is able
-to dump the configurations needed for a REMD simulation.
+to dump the configurations needed for a new REMD simulation.
 """
 
 import argparse
@@ -19,23 +19,45 @@ import numpy as np
 def initialize(args):
     parser = argparse.ArgumentParser(
         description='Extract .gro files at certain time frames from one trajectory.')
+    parser.add_argument('-m',
+                        '--method',
+                        choices={'REMD', 'EXE'},
+                        required=True,
+                        help='Whether to extract configurations from an EXE simulation \
+                            or an REMD simulation. Available options: REMD or EXE.')
     parser.add_argument('-nm',
                         '--mdp',
-                        help='The .mdp file to use in the REMD simulation.')
+                        help='The .mdp file to use in the new REMD simulation.')
     parser.add_argument('-l',
                         '--log',
-                        help='The file name of the log file.')
+                        help='The file name of the log file of either an EXE or REMD \
+                            simulation.')
     parser.add_argument('-f',
                         '--trj',
-                        help='The file name of the trajectory file (.trr or .xtc).')
+                        nargs='+',
+                        help='The file name of the trajectory file(s) (.trr or .xtc). \
+                            of either an EXE or REMD simulaiton. If the REMD method is \
+                            chosen, multiple trjaectory files might be required. If this\
+                            is the case, consider not specifying this flag and using -d \
+                            flag to let the program locate the required trajectory files\
+                            automatically.')
     parser.add_argument('-s',
                         '--tpr',
-                        help='The file name of the structure file (.tpr).')
+                        nargs='+',
+                        help='The file name of the structure file (.tpr). of either an \
+                            EXE or REMD simulation. If the REMD method is chosen, multiple \
+                            trajectory files might be required. If this is the case, consider\
+                            not specifying this flag and using -d flag to let the program \
+                            locate the required trajectory files automatically.')
+    parser.add_argument('-d',
+                        '--dir',
+                        help='The directory of where stateX folders are. This is specifically \
+                            for the case of extracting configurations from an REMD simulation.')
     parser.add_argument('-p',
                         '--prefix',
                         help='The common prefix of the simulation files.')
-    parser.add_argument('-m',
-                        '--mpi',
+    parser.add_argument('-M',
+                        '--MPI',
                         default=False,
                         action='store_true',
                         help='Whether the MPI-version of GROMACS is used. "-m" \
@@ -48,7 +70,7 @@ def initialize(args):
             if file.endswith('.mdp'):
                 args_parse.mdp = file
         if args_parse.mdp is None:
-            print('Error: No log file provided or found!')
+            print('Error: No mdp file for the new REMD simulation provided or found!')
             sys.exit()
 
     if args_parse.log is None:
@@ -56,37 +78,65 @@ def initialize(args):
             if file.endswith('.log'):
                 args_parse.log = file
         if args_parse.log is None:
-            print('Error: No log file provided or found!')
+            print('Error: No log file of an EXE or REMD simulation provided or found!')
             sys.exit()
 
     if args_parse.prefix is None:
         args_parse.prefix = args_parse.log.split('.')[0]
 
-    if args_parse.trj is None:
-        if os.path.isfile('%s.trr' % args_parse.prefix) is True:
-            args_parse.trj = '%s.trr' % args_parse.prefix
-        elif os.path.isfile('%s.xtc' % args_parse.prefix) is True:
-            args_parse.trj = '%s.xtc' % args_parse.prefix
-        else:
-            print('Error: No trajectory file (.xtc or .trr file) provided or found!')
-            sys.exit()
+    # Note that here we assume that the file names of the trajectory files and the .tpr files
+    # of different replicas of REMD are the same.
 
+    if args_parse.trj is None:  
+        if args_parse.method == 'EXE':
+            if os.path.isfile('%s.trr' % args_parse.prefix) is True:
+                args_parse.trj = '%s.trr' % args_parse.prefix
+            elif os.path.isfile('%s.xtc' % args_parse.prefix) is True:
+                args_parse.trj = '%s.xtc' % args_parse.prefix
+            else:
+                print('Error: No trajectory file (.xtc or .trr file) of the EXE simulation provided or found!')
+                sys.exit()
+
+        elif args_parse.method == 'REMD':
+            dir_trr = args_parse.dir + 'state_0/%s.trr' % args_parse.prefix
+            dir_xtc = args_parse.dir + 'state_0/%s.xtc' % args_parse.prefix
+
+            if os.path.isfile(dir_trr) is True:
+                args_parse.trj = '%s.trr' % args_parse.prefix
+            elif os.path.isfile(dir_xtc) is True:
+                args_parse.trj = '%s.xtc' % args_parse.prefix
+            else:
+                print('Error: Missing trajectory file (.xtc or .trr file) of the REMD simulation!')
+                sys.exit()
+    
     if args_parse.tpr is None:
-        if os.path.isfile('%s.tpr' % args_parse.prefix) is True:
-            args_parse.tpr = '%s.tpr' % args_parse.prefix
-        else:
-            print('Error: No structure file (.tpr file) provided or found!')
-            sys.exit()
+        if args_parse.method == 'EXE':
+            if os.path.isfile('%s.tpr' % args_parse.prefix) is True:
+                args_parse.tpr = '%s.tpr' % args_parse.prefix
+            else:
+                print('Error: No structure file (.tpr file) provided or found!')
+                sys.exit()
+
+        elif args_parse.method == 'REMD':
+            dir_tpr = args_parse.dir + 'state_0/%s.tpr' % args_parse.prefix
+            if os.path.isfile(dir_tpr) is True:
+                args_parse.tpr = '%s.tpr' % args_parse.prefix
+            else:
+                print('Error: Missing .tpr file of the REMD simulation!')
+                sys.exit()
 
     return args_parse
 
-
 class ExtractState:
     def __init__(self, mdp, log):
-        # self.lambda = [coul[i], vdw[i], restr[i]]
-        self.mdp_lambda, self.log_lambda = [], []
-
+        """
+        This function get the information of the new lambda values by parsing the 
+        mdp file for the new REMD simulation and the old lambda values by parsing
+        the log file of the old REMD or EXE simulation.
+        """
+        
         # info in mdp: for the new simulation
+        self.mdp_lambda = []   # self.mdp_lambda = [coul[i], vdw[i], restr[i]]
         f = open(mdp, 'r')
         lines = f.readlines()
         f.close()
@@ -99,7 +149,7 @@ class ExtractState:
             if 'restraint-lambdas' in l:
                 mdp_restr = [float(i) for i in l.split('=')[1].split()]
 
-        self.mdp_N = len(mdp_coul)
+        self.mdp_N = len(mdp_coul)  # number of states of the new REMD simulation
 
         # combine all the lambda values in self.mdp_lambda
 
@@ -107,7 +157,9 @@ class ExtractState:
             self.mdp_lambda.append([])
             self.mdp_lambda[i] = [mdp_coul[i], mdp_vdw[i], mdp_restr[i]]
 
+
         # info in log: out of the exisiting simulation
+        self.log_lambda = []   # self.log_lambda = [coul[i], vdw[i], restr[i]]
         f = open(log, 'r')
         lines = f.readlines()
         f.close()
@@ -135,6 +187,13 @@ class ExtractState:
             self.log_lambda[i] = [self.log_coul[i], self.log_vdw[i], self.log_restr[i]]
 
     def get_extract_state(self, mdp, log):
+        """
+        This function compare the new and old lambda values to decide from which 
+        states should extract to serve as the starting configurations of the new 
+        REMD. Note that we always extract the structure at the last time frame, 
+        which is the safest way if we want to ensure that the system has equilibrated.
+        This function can be used for both EXE method and REMD method.
+        """
         extract_state = np.zeros(self.mdp_N)
         # extract_state[i]: the configuration i was extracted from the state i in the exisiting simulation
 
@@ -158,11 +217,11 @@ class ExtractState:
                             else:                           # closer to coupled state
                                 extract_state[i] = j
 
-        extract_state = np.array(extract_state) + 1  # make the state index starts from 1 instead of 0
+        # extract_state = np.array(extract_state) + 1  # make the state index starts from 1 instead of 0
 
         return extract_state
 
-    def get_extract_time(self, log, extract_state):
+    def get_extract_time(self, method, log, extract_state):
         # extract_time[i]: the time frame from which the confiuration i was extracted
         # Note that the list extract_state might look like:
         # [1, 1, ,2, 2, 3, 4, 5, 5, 5, 6, ...]
@@ -170,73 +229,116 @@ class ExtractState:
         # like: {1: 2, 2: 2, 3: 1, 4:1, 5: 3, ...}
         # The function will make sure that all the confiuguration are extracted from different time frame
         # even if the configurations are at the same states.
-        state_dict = {}   # key: state to find
-        for i in range(len(extract_state)):
-            if extract_state[i] not in state_dict:
-                state_dict[extract_state[i]] = 1
-            else:
-                state_dict[extract_state[i]] += 1
 
-        found_dict = copy.copy(state_dict)   # for checking if each configuration has been found
-        for i in found_dict:
-            found_dict[i] = 0
+        if method == 'EXE':
+            state_dict = {}   # key: state to find
+            for i in range(len(extract_state)):
+                if extract_state[i] not in state_dict:
+                    state_dict[extract_state[i]] = 1
+                else:
+                    state_dict[extract_state[i]] += 1
 
-        f = open(log, 'r')
-        lines = f.readlines()
-        f.close()
+            found_dict = copy.copy(state_dict)   # for checking if each configuration has been found
+            for i in found_dict:
+                found_dict[i] = 0
 
-        line_n = 0
-        extract_time = np.zeros(len(extract_state))
+            f = open(log, 'r')
+            lines = f.readlines()
+            f.close()
 
-        for l in lines:
-            line_n += 1
-            if 'MC-lambda information' in l:
-                for i in range(self.log_N):
-                    # the lambdas value start from lines[line_n + 2]
-                    # 'MC-lambda information' is lines[line_n - 1]
-                    # the time frame is in lines[line_n - 3]  (units: ps)
-                    if lines[line_n + 2 + i].split()[-1] == '<<':
-                        N = int(lines[line_n + 2 + i].split()[0])
-                        if N in state_dict and found_dict[N] < state_dict[N]:
-                            N_idx = list(extract_state).index(N) + found_dict[N]
-                            # for example, for the second time that state N is found
-                            # N_idx = extract_state.index(N_idx) + 1
-                            extract_time[N_idx] = float(lines[line_n - 3].split()[1])   # (units: ps)
-                            found_dict[N] += 1   # should be after extract_time[N_idx]
-                    if found_dict == state_dict:
-                        # all the configurations have been found
-                        break
+            line_n = 0
+            extract_time = np.zeros(len(extract_state))
+
+            for l in lines:
+                line_n += 1
+                if 'MC-lambda information' in l:
+                    for i in range(self.log_N):
+                        # the lambdas value start from lines[line_n + 2]
+                        # 'MC-lambda information' is lines[line_n - 1]
+                        # the time frame is in lines[line_n - 3]  (units: ps)
+                        if lines[line_n + 2 + i].split()[-1] == '<<':
+                            N = int(lines[line_n + 2 + i].split()[0])
+                            if N in state_dict and found_dict[N] < state_dict[N]:
+                                N_idx = list(extract_state).index(N) + found_dict[N]
+                                # for example, for the second time that state N is found
+                                # N_idx = extract_state.index(N_idx) + 1
+                                extract_time[N_idx] = float(lines[line_n - 3].split()[1])   # (units: ps)
+                                found_dict[N] += 1   # should be after extract_time[N_idx]
+                        if found_dict == state_dict:
+                            # all the configurations have been found
+                            break
+        
+        elif method == 'REMD':
+            f = open(log, 'r')
+            lines = f.readlines()
+            f.close()
+
+            lines.reverse()  # from this point, lines have been reversed
+            for l in lines:
+                # print(l)   # this will print from the bottom
+                if 'Replica exchange at step' in l:
+                    extract_time = l.split('time')[1]
+                    break
+            extract_time = int(extract_time.split('.')[0]) - 5  
+            # make sure that there is a structure able to be extracted
 
         return extract_time
 
 
 def main():
     args = initialize(sys.argv[1:])
-    print("EXE simulation output files from which the configurations will be extracted:")
-    print("%s, %s, and %s." % (args.log, args.tpr, args.trj) )
-    print("The .mdp file for the REMD simulation is : %s\n" % args.mdp)
-    print("Initializing the preparation of the .gro files...")
-    ES = ExtractState(args.mdp, args.log)
-    print("Identifying the time frames from which the configurations will be extracted ...")
-    extract_state = ES.get_extract_state(args.mdp, args.log)
-    extract_time = ES.get_extract_time(args.log, extract_state)
-    print("Start extracting configurations from the trajectory of the provided EXE simulation ...")
-    
-    for i in range(len(extract_time)):
-        # note that we use os.popen intead of os.system to use pip to answer the prompts
-        # raised by gromacs
-        os.system("mkdir state_%s" % i)
-        if args.mpi:
-            p = os.popen("gmx_mpi trjconv -f %s -s %s -o state_%s/%s.gro -dump %s"
-                         % (args.trj, args.tpr, i, args.prefix, extract_time[i]), 'w')
-            p.write("0")
 
-        if not args.mpi:
-            p = os.popen("gmx trjconv -f %s -s %s -o state_%s/%s.gro -dump %s"
-                         % (args.trj, args.tpr, i, args.prefix, extract_time[i]), 'w')
-            p.write("0")
+    if args.method == 'EXE':
+        print("Chosen method: extracting configurations from an EXE simulation.")
+        print("EXE simulation output files from which the configurations will be extracted:")
+        print("%s, %s, and %s." % (args.log, args.tpr, args.trj) )
+        print("The .mdp file for the new REMD simulation is: %s\n" % args.mdp)
+        print("Initializing the preparation of the .gro files ...")
+        ES = ExtractState(args.mdp, args.log)
+        extract_state = ES.get_extract_state(args.mdp, args.log)
+        print("Identifying the time frames from which the configurations will be extracted ...")
+        extract_time = ES.get_extract_time(args.method, args.log, extract_state)
+        print("Start extracting configurations from the trajectory of the provided EXE simulation ...")
+        
+        for i in range(len(extract_time)):
+            # note that we use os.popen intead of os.system to use pip to answer the prompts
+            # raised by gromacs
+            os.system("mkdir state_%s" % i)
+            if args.MPI:
+                p = os.popen("gmx_mpi trjconv -f %s -s %s -o state_%s/%s.gro -dump %s"
+                            % (args.trj, args.tpr, i, args.prefix, extract_time[i]), 'w')
+                p.write("0")
 
+            if not args.MPI:
+                p = os.popen("gmx trjconv -f %s -s %s -o state_%s/%s.gro -dump %s"
+                            % (args.trj, args.tpr, i, args.prefix, extract_time[i]), 'w')
+                p.write("0")  # 0: System
 
-    # Might not be reached here since GROMCAS does not send signal to Python after 
+    elif args.method == 'REMD':
+        print("Chosen method: extracting configurations from an REMD simulation.")
+        print("The .mdp file for the new REMD simulation is: %s\n" % args.mdp)
+        print("Initializing the preparation of the .gro files ...")
+        ES = ExtractState(args.mdp, args.log)
+        extract_state = ES.get_extract_state(args.mdp, args.log) 
+        print('The .gro files are going to be extracted from the following states of the provided REMD:')
+        print('extract_state = ', extract_state)
+        extract_time = ES.get_extract_time(args.method, args.log, extract_state)
+        print("Start extracting configurations from the trajectory of the provided REMD simulation ...")
+
+        for i in range(len(extract_state)):
+            s = int(extract_state[i])
+            # note that we use os.popen intead of os.system to use pip to answer the prompts
+            # raised by gromacs
+            os.system("mkdir state_%s" % i)
+            if args.MPI:
+                p = os.popen("gmx_mpi trjconv -f %sstate_%s/%s -s %sstate_%s/%s -o state_%s/%s.gro -dump %s"
+                            % (args.dir, s, args.trj, args.dir, s, args.tpr, i, args.prefix, extract_time), 'w')
+                p.write("0")   # 0: System
+            if not args.MPI:
+                p = os.popen("gmx trjconv -f %sstate_%s/%s -s %sstate_%s/%s -o state_%s/%s.gro -dump %s"
+                            % (args.dir, s, args.trj, args.dir, s, args.tpr, i, args.prefix, extract_time), 'w')
+                p.write("0")   # 0: System
+
+    # Might not reach here since GROMCAS does not send signal to Python after 
     # the trjconv commands are done. Press Ctrl + C to exit. (The work can be properly done though.)
     print("Complete!")  

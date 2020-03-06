@@ -156,7 +156,7 @@ class REMDAnalysis(LogInfo):
             # Then read from the bottom to get the overlap matrix
             # (since if the simulation is finished, the overlap matrix will be calculated automatically)
             # lines here are from the last logfile
-            lines.reverse()    # from this point, lines has been reverse
+            lines.reverse()    # from this point, lines have been reversed
             line_n = 0
             for l in lines:
                 # print(l)    # this will print from the bottom
@@ -168,7 +168,7 @@ class REMDAnalysis(LogInfo):
                                                                         i].split('Repl')[1].split()[:self.N_states]]
 
         if self.finish is False:
-            # Then we have to calculate overlap matrix on our own as follows.
+            # Then we have to calculate transition matrix on our own as follows.
             for k in range(len(logfiles)):
                 f = open(logfiles[k], 'r')
                 lines = f.readlines()

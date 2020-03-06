@@ -9,6 +9,8 @@ read -p "Please input the number of requested nodes: " nodes
 read -p "Please input the simulation time (in hour): " simutime
 read -p "Will the job be submitted to Summit or Bridges? " HPC
 read -p "Are the configurations for different states the same? (yes/no) " conf 
+read -p "Do you want to write a job submission script? (yes/no) " jobscript
+read -p "Do you want to submit the job? (yes/no) " sub
 
 if [ ${HPC} == "Summit" ] || [ ${HPC} == "summit" ]
 then
@@ -41,59 +43,83 @@ do
     cd state_${i}
     gmx_mpi grompp -f ${name}_restr4_${i}.mdp -c ${name}.gro -p ${name}.top -n ${name}.ndx -o ${name}.tpr -maxwarn 4
     cd ../
-    
 done
 
-echo Writing job submission script and submitting the job ...
-
-dir=""
-for (( i=0; i<$N; i=i+1 ))
-do 
-    dir+="state_${i} "
-done
-
-if [ ${HPC} == "Summit" ] || [ ${HPC} == "summit" ]
+if [ ${jobscript} == "yes" ]
 then
-    touch HREX_run.sh
-    d="#!/bin/sh
-#SBATCH --job-name ${jobname}
-#SBATCH --qos normal
-#SBATCH --nodes=$nodes
-#SBATCH --tasks-per-node=$(( ${N} / ${nodes} ))
-#SBATCH --cpus-per-task=$(( 24 / (( ${N} / ${nodes} )) ))
-#SBATCH --time ${simutime}:00:00
-#SBATCH --partition shas
+    echo Writing job submission script ...
 
-module load gromacs/2018.3
+    dir=""
+    for (( i=0; i<$N; i=i+1 ))
+    do 
+        dir+="state_${i} "
+    done
 
-# export OMP_NUM_THREADS=24
+    if [ ${HPC} == "Summit" ] || [ ${HPC} == "summit" ]
+    then
+        touch HREX_run.sh
+        d="#!/bin/sh
+    #SBATCH --job-name ${jobname}
+    #SBATCH --qos normal
+    #SBATCH --nodes=$nodes
+    #SBATCH --tasks-per-node=$(( ${N} / ${nodes} ))
+    #SBATCH --cpus-per-task=$(( 24 / (( ${N} / ${nodes} )) ))
+    #SBATCH --time ${simutime}:00:00
+    #SBATCH --partition shas
 
-mpirun -np ${N} gmx_mpi mdrun -deffnm ${name} -dhdl ${name}_dhdl.xvg -replex 100 -nex $(( ${N} * ${N} * ${N})) -multidir ${dir}" 
+    module load gromacs/2018.3
 
-    echo "${d}" >> HREX_run.sh 
-    sbatch HREX_run.sh
+    # export OMP_NUM_THREADS=24
 
-    echo Complete!
+    mpirun -np ${N} gmx_mpi mdrun -deffnm ${name} -dhdl ${name}_dhdl.xvg -replex 100 -nex $(( ${N} * ${N} * ${N})) -multidir ${dir}" 
 
-elif [ ${HPC} == "Bridges" ] || [ ${HPC} == "bridges" ]
-then 
-    touch HREX_run.sh
-    d="#!/bin/sh
-#SBATCH -N $nodes
-#SBATCH -p RM
-#SBATCH -t $simutime:00:00
-#SBATCH --ntasks-per-node=$(( ${N} / ${nodes} ))
+        echo "${d}" >> HREX_run.sh 
+        
+        if [ ${sub} == "yes" ]
+        then
+            sbatch HREX_run.sh
+            echo "Job submitted!"
+        elif [ ${sub} == "no" ]
+        then
+            true
+        else
+            echo "Bad input for the question: Do you want to submit the job? (yes/no). "
+        fi
 
-module load gromacs/2018_gpu
-module load mpi/intel_mpi
+        echo Complete!
 
-# export OMP_NUM_THREADS=24
-mpirun -np ${N} gmx_mpi mdrun -deffnm ${name} -dhdl ${name}_dhdl.xvg -replex 100 -nex $(( ${N} * ${N} * ${N})) -multidir ${dir}"
+    elif [ ${HPC} == "Bridges" ] || [ ${HPC} == "bridges" ]
+    then 
+        touch HREX_run.sh
+        d="#!/bin/sh
+    #SBATCH -N $nodes
+    #SBATCH -p RM
+    #SBATCH -t $simutime:00:00
+    #SBATCH --ntasks-per-node=$(( ${N} / ${nodes} ))
 
-    echo "${d}" >> HREX_run.sh 
-    sbatch HREX_run.sh
+    module load gromacs/2018_gpu
+    module load mpi/intel_mpi
 
-    echo Complete!
+    # export OMP_NUM_THREADS=24
+    mpirun -np ${N} gmx_mpi mdrun -deffnm ${name} -dhdl ${name}_dhdl.xvg -replex 100 -nex $(( ${N} * ${N} * ${N})) -multidir ${dir}"
+
+        echo "${d}" >> HREX_run.sh 
+
+        if [ ${sub} == "yes" ]
+        then
+            sbatch HREX_run.sh
+            echo "Job submitted"
+        elif [ ${sub} == "no" ]
+        then
+            true
+        else
+            echo "Bad input for the question: Do you want to submit the job? (yes/no). "
+        fi
+
+        echo Complete!
+    else
+        echo "Wrong selected HPC. Available options are Summit and Bridges."
+    fi
 else
-    echo "Wrong selected HPC. Available options are Summit and Bridges."
+    echo Complete!
 fi
