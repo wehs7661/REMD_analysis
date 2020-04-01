@@ -27,6 +27,13 @@ def initialize(args):
                         '--prefix',
                         type=str,
                         help='The common prefix of the simulation files.')
+    parser.add_argument('-d',
+                        '--diag',
+                        default=False,
+                        action='store_true',
+                        help='Whethter to plot the diagonal of the transition \
+                            matrix as a function of time. "-d" specified meands \
+                            that the plot will be generated.')
 
     args_parse = parser.parse_args(args)
 
@@ -63,9 +70,9 @@ class LogInfo:
 
             if 'Command line' in l:
                 if 'nex' in lines[line_n]:
-                    self.nex = True
+                    self.nex = True  
                 else:
-                    self.nex = False
+                    self.nex = False            
 
                 if 'replex' in lines[line_n]:
                     self.replex = float(lines[line_n].split('replex')[1].split()[0])
@@ -90,12 +97,12 @@ class REMDAnalysis(LogInfo):
         Sets up the properties of the instance of REMDAnalysis
         """
         self.sample_all = None
-        self.finish = None   # if the simulation finishes all the steps specified
+        self.finish = False   # if the simulation finishes all the steps specified
         self.n_ex = 0        # number of exchanges
         self.final_t = None
         LogInfo.__init__(self, logfiles)
 
-    def get_replica_data(self, logfiles):
+    def get_replica_data(self, logfiles, calc_diag=False):
         """
         Gets the data of of each replica from the log file, including the state-time 
         data and transition matrix. Note that according to the log file in GROMACS, 
@@ -106,6 +113,9 @@ class REMDAnalysis(LogInfo):
         ----------
         logfiles : list
             A list of the names of log files
+        calc_diag: bool
+            Whethter to calculate the diagonal of the transition matrix as a function 
+            of time.
 
         Returns
         -------
@@ -123,10 +133,15 @@ class REMDAnalysis(LogInfo):
             
             if k == 0:
                 state_data = []
+                if calc_diag is True:
+                    diag_data = []
+
                 for i in range(self.N_states):
                     # data_all[i] represents the states that replica i has visited
                     state_data.append([])
-                    state_data[i].append(i)
+                    state_data[i].append(i) # replica i starts from state i  
+                    if calc_diag is True:
+                        diag_data.append([])
 
             for l in lines[self.start:]:
                 line_n += 1
@@ -141,34 +156,38 @@ class REMDAnalysis(LogInfo):
         time = np.linspace(0, self.final_t, self.n_ex + 1)
 
         # Part 2: Get the data of transition matrix
-        try:
-            # Use external shell command to search the string would be faster
-            subprocess.check_output("grep 'Replica exchange statistics' %s" % logfiles[-1], shell=True)
-            self.finish = True
-        except:
-            # Handle the error which would occur if the string is not found
-            self.finish = False
-
-        count_matrix = np.zeros([self.N_states, self.N_states])
         transition_matrix = np.zeros([self.N_states, self.N_states])
 
-        if self.finish is True:
-            # Then read from the bottom to get the overlap matrix
-            # (since if the simulation is finished, the overlap matrix will be calculated automatically)
-            # lines here are from the last logfile
-            lines.reverse()    # from this point, lines has been reverse
-            line_n = 0
-            for l in lines:
-                # print(l)    # this will print from the bottom
-                line_n += 1
-                if 'Replica exchange statistics' in l:
-                    # data starts from lines[line_n - 5]
-                    for i in range(self.N_states):
-                        transition_matrix[i] = [float(v) for v in lines[line_n - 5 -
-                                                                        i].split('Repl')[1].split()[:self.N_states]]
+        # if calc_diag is True, then we have to go over the whole file to calculate 
+        # transition matrix anyway, so it doesn't matter if self.finish is True or not
+        if calc_diag is False:
+            try:
+                # Use external shell command to search the string would be faster
+                subprocess.check_output("grep 'Replica exchange statistics' %s" % logfiles[-1], shell=True)
+                self.finish = True
+            except:
+                # Handle the error which would occur if the string is not found
+                self.finish = False
 
-        if self.finish is False:
-            # Then we have to calculate overlap matrix on our own as follows.
+            if self.finish is True:
+                # Then read from the bottom to get the transition matrix
+                # (since if the simulation is finished, the overlap matrix will be calculated automatically)
+                # lines here are from the last logfile
+                lines.reverse()    # from this point, lines have been reversed
+                line_n = 0
+                for l in lines:
+                    # print(l)    # this will print from the bottom
+                    line_n += 1
+                    if 'Replica exchange statistics' in l:
+                        # data starts from lines[line_n - 5]
+                        for i in range(self.N_states):
+                            transition_matrix[i] = [float(v) for v in lines[line_n - 5 -
+                                                                            i].split('Repl')[1].split()[:self.N_states]]
+
+        if self.finish is False or calc_diag is True:
+            # Then we have to calculate transition matrix on our own as follows.
+            count_matrix = np.zeros([self.N_states, self.N_states])
+
             for k in range(len(logfiles)):
                 f = open(logfiles[k], 'r')
                 lines = f.readlines()
@@ -184,14 +203,24 @@ class REMDAnalysis(LogInfo):
                             count_matrix[i, rep_list.index(i)] += 1
                             count_matrix[rep_list.index(i), i] += 1
 
+                        if calc_diag is True:
+                            # diag_prob = the diagonal probability of each state at a certain time frame
+                            diag_prob = [count_matrix[i, i] / sum(count_matrix[i]) for i in range(self.N_states)]
+                            
+                            for i in range(len(diag_prob)):
+                                diag_data[i].append(diag_prob[i])
+
             # get transition_matrix from the data of count_matrix
             for i in range(self.N_states):
                 for j in range(self.N_states):
                     transition_matrix[i, j] = count_matrix[i, j] / sum(count_matrix[i])
+        
+        if calc_diag is False:
+            return time, state_data, transition_matrix
+        elif calc_diag is True:
+            return time, state_data, np.array(diag_data), transition_matrix
 
-        return time, state_data, transition_matrix
-
-    def plot_state_data(self, time, state_data, diag, png_name):
+    def plot_data(self, time, data, png_name, diag=None, plot_type=None):
         if int(np.sqrt(self.N_states) + 0.5) ** 2 == self.N_states:
             # perfect sqaure number
             n_cols = int(np.sqrt(self.N_states))
@@ -204,20 +233,32 @@ class REMDAnalysis(LogInfo):
             n_rows = int(np.floor(self.N_states / n_cols)) + 1
 
         _, ax = plt.subplots(nrows=n_rows, ncols=n_cols, figsize=(2.5 * n_cols, 2.5 * n_rows))
-        plt.suptitle('Exploration of states as a function of time', weight='bold', fontsize=14)
+        if plot_type == 'state':
+            plt.suptitle('Exploration of states as a function of time', weight='bold', fontsize=14)
+        if plot_type == 'diag':
+            plt.suptitle('Probability of staying at the original state as a function of time', weight='bold', fontsize=14)
 
         for i in range(self.N_states):
             plt.subplot(n_rows, n_cols, i + 1)
-            plt.plot(np.array(time) / 1000, state_data[i])
-            # r = probability of staying at the original state
-            plt.annotate('(Replica %s, r = %s%%)' % (i, diag[i]), xy=(0, 0), xytext=(0, self.N_states * 0.05))
+            plt.plot(np.array(time) / 1000, data[i])
+            
+            if diag is not None:
+                # r = probability of staying at the original state
+                plt.annotate('(Replica %s, r = %s%%)' % (i, diag[i]), xy=(0, 0), xytext=(0, self.N_states * 0.05))
 
             if (i + 1) % n_cols == 1:
-                plt.ylabel('State')
+                if plot_type == 'state':
+                    plt.ylabel('State')
+                elif plot_type == 'diag':
+                    plt.ylabel('Diagonal probability (%)')
+                    
             if (i + 1) > (n_rows - 1) * n_cols:
-                plt.xlabel('Time (ns)')
-
-            plt.ylim([0, self.N_states - 1])
+                    plt.xlabel('Time (ns)')
+            
+            if plot_type == 'state':
+                plt.ylim([0, self.N_states - 1])
+            elif plot_type == 'diag':
+                plt.ylim([0, 100])
             plt.grid()
 
         # Remove redundant subplots
@@ -342,16 +383,26 @@ def main():
     
     print('Analyzing the log file ...')
     RA = REMDAnalysis(args.log)
-    time, state, t_matrix = RA.get_replica_data(args.log)
-    # the probability of staying at the original state
-    diag = np.round(100 * np.diagonal(t_matrix), 1)   
+
+    if args.diag is False:
+        time, state, t_matrix = RA.get_replica_data(args.log, calc_diag=args.diag)
+    elif args.diag is True:
+        time, state, diag_prob, t_matrix = RA.get_replica_data(args.log, calc_diag=args.diag)
+
+    # the probability of staying at the original state (at the last time frame)
+    diag = np.round(100 * np.diagonal(t_matrix), 1) 
 
     print('Simulation length: %s ns (%s exchanges occured.)\n' % (RA.final_t / 1000, RA.n_ex))
     
     print('Plotting the exploration of states as a function of time ...')
-    RA.plot_state_data(time, state, diag, 'state_time_%s.png' % args.prefix)
-    print('The state time plot, state_time_%s.png, has been geneated.\n' % args.prefix)
-
+    RA.plot_data(time, state, 'state_time_%s.png' % args.prefix, diag=diag, plot_type='state')
+    print('The state time plot, state_time_%s.png, has been generated.\n' % args.prefix)
+    
+    if args.diag is True:
+        print('Plotting the diagonal of the transition matrix as a function of time ...')
+        RA.plot_data(time[1:], diag_prob * 100, 'diagprob_time_%s.png' % args.prefix, diag=diag, plot_type='diag')
+        print('The plot of diagonal proability, diag_prob_time_%s.png, has been generated.\n' % args.prefix)
+    
     print('Plotting the transition matrix as a heat map ...')
     RA.plot_matrix(t_matrix, 'transition_matrix_%s.png' % args.prefix)
     print('The heat map of the transition matrix, transition_matrix_%s.png, has been generated.\n' % args.prefix)

@@ -40,6 +40,9 @@ install:
     # Build and install package
   - python setup.py develop --no-deps
   - conda install -c omnia pymbar
+  - conda install natsort
+  - conda install seaborn
+  - pip install alchemlyb
 
 script:
   - pytest -v --cov=REMD_analysis REMD_analysis/tests/
