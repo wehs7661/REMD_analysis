@@ -220,17 +220,20 @@ class REMDAnalysis(LogInfo):
         elif calc_diag is True:
             return time, state_data, np.array(diag_data), transition_matrix
 
-    def plot_data(self, time, data, png_name, diag=None, plot_type=None):
-        if int(np.sqrt(self.N_states) + 0.5) ** 2 == self.N_states:
+    def plot_replica_data(self, time, data, png_name, diag=None, plot_type=None, n_subplots=None, start_idx=1):
+        if n_subplots is None:
+            n_subplots = self.N_states
+
+        if int(np.sqrt(n_subplots) + 0.5) ** 2 == n_subplots:
             # perfect sqaure number
-            n_cols = int(np.sqrt(self.N_states))
+            n_cols = int(np.sqrt(n_subplots))
         else:
-            n_cols = int(np.floor(np.sqrt(self.N_states))) + 1
+            n_cols = int(np.floor(np.sqrt(n_subplots))) + 1
 
         if self.N_states % n_cols == 0:
-            n_rows = int(self.N_states / n_cols)
+            n_rows = int(n_subplots / n_cols)
         else:
-            n_rows = int(np.floor(self.N_states / n_cols)) + 1
+            n_rows = int(np.floor(n_subplots / n_cols)) + 1
 
         _, ax = plt.subplots(nrows=n_rows, ncols=n_cols, figsize=(2.5 * n_cols, 2.5 * n_rows))
         if plot_type == 'state':
@@ -238,13 +241,13 @@ class REMDAnalysis(LogInfo):
         if plot_type == 'diag':
             plt.suptitle('Probability of staying at the original state as a function of time', weight='bold', fontsize=14)
 
-        for i in range(self.N_states):
+        for i in range(n_subplots):
             plt.subplot(n_rows, n_cols, i + 1)
             plt.plot(np.array(time) / 1000, data[i])
             
             if diag is not None:
                 # r = probability of staying at the original state
-                plt.annotate('(Replica %s, r = %s%%)' % (i, diag[i]), xy=(0, 0), xytext=(0, self.N_states * 0.05))
+                plt.annotate('(Replica %s, r = %s%%)' % (i + start_idx, diag[i]), xy=(0, 0), xytext=(0, self.N_states * 0.05))
 
             if (i + 1) % n_cols == 1:
                 if plot_type == 'state':
@@ -262,7 +265,7 @@ class REMDAnalysis(LogInfo):
             plt.grid()
 
         # Remove redundant subplots
-        n_rm = n_cols * n_rows - self.N_states
+        n_rm = n_cols * n_rows - n_subplots
         for i in range(n_rm):
             ax.flat[-1 * (i + 1)].set_visible(False)
 
@@ -271,7 +274,7 @@ class REMDAnalysis(LogInfo):
         # plt.show()
         plt.close()
     
-    def plot_matrix(self, matrix, png_name):
+    def plot_matrix(self, matrix, png_name, start_idx=0):
         sns.set_context(rc={
         'family': 'sans-serif',
         'sans-serif': ['DejaVu Sans'],
@@ -295,8 +298,9 @@ class REMDAnalysis(LogInfo):
             for j in range(K):
                 annot_matrix[i, j] = round(matrix[i, j], 2)
 
+        x_tick_labels = y_tick_labels = np.arange(start_idx, start_idx + K)
         ax = sns.heatmap(matrix, cmap="YlGnBu", linecolor='silver', linewidth=0.25, 
-                        annot=annot_matrix, square=True, mask=mask, fmt='.2f', cbar=False)
+                        annot=annot_matrix, square=True, mask=mask, fmt='.2f', cbar=False, xticklabels=x_tick_labels, yticklabels=y_tick_labels)
         ax.xaxis.tick_top()
         ax.tick_params(length=0)
         cmap = cm.get_cmap('YlGnBu')   # to get the facecolor
@@ -394,18 +398,86 @@ def main():
 
     print('Simulation length: %s ns (%s exchanges occured.)\n' % (RA.final_t / 1000, RA.n_ex))
     
+    # Some parameters to use for larger numbers of states
+    if RA.N_states > 80: # using 49 as a unit, separate the plot into several
+        n_figs = int(np.ceil(RA.N_states / 49))
+        n_subplots = int(np.floor(RA.N_states / n_figs))  # min number of subplots
+        n_list = np.zeros(n_figs)  # a list of number of subplots of each figure
+
+        # Consider the following equation
+        # x: number of figures that contain n_subplots subplots
+        # y: number of figures that contain (n_subplots + 1) subplots
+        # nx + (n+1)y = self.N_states (n: n_subplots)
+        # x + y = n_figs
+        # For example, if n_figs = 3, self.N_states = 83, then n_list = np.array(27, 28, 28])
+        # and bounds = [0, 27, 55, 83]
+
+        y = RA.N_states - n_subplots * n_figs
+        x = n_figs - y
+
+        for i in range(x):
+            n_list[i] = n_subplots
+        for i in range(y):
+            n_list[i + x] = n_subplots + 1
+        
+        bounds = [0]
+        for i in range(n_figs):
+            bounds.append(int(np.sum(n_list[:i + 1])))
+
     print('Plotting the exploration of states as a function of time ...')
-    RA.plot_data(time, state, 'state_time_%s.png' % args.prefix, diag=diag, plot_type='state')
-    print('The state time plot, state_time_%s.png, has been generated.\n' % args.prefix)
+    if RA.N_states <= 80:
+        RA.plot_replica_data(time, state, 'state_time_%s.png' % args.prefix, diag=diag, plot_type='state')
+        print('The state time plot, state_time_%s.png, has been generated.\n % args.prefix')
+    else:   
+        for i in range(n_figs):
+            RA.plot_replica_data(time, state[bounds[i]:bounds[i + 1]], 'state_time_%s_part%s.png' % (args.prefix, i + 1), diag=diag, plot_type='state', n_subplots=int(n_list[i]), start_idx=bounds[i])
+            print('The state time plot, state_time_%s_part%s.png, has been generated.\n' % (args.prefix, i + 1))
     
     if args.diag is True:
         print('Plotting the diagonal of the transition matrix as a function of time ...')
-        RA.plot_data(time[1:], diag_prob * 100, 'diagprob_time_%s.png' % args.prefix, diag=diag, plot_type='diag')
-        print('The plot of diagonal proability, diag_prob_time_%s.png, has been generated.\n' % args.prefix)
-    
+        if RA.N_states <= 80:
+            RA.plot_replica_data(time[1:], diag_prob * 100, 'diagprob_time_%s.png' % args.prefix, diag=diag, plot_type='diag')
+            print('The plot of diagonal proability, diag_prob_time_%s.png, has been generated.\n' % args.prefix)
+        else:
+            for i in range(n_figs):
+                RA.plot_replica_data(time[1:], diag_prob[bounds[i]:bounds[i + 1]] * 100, 'diagprob_time_%s_part%s.png' % (args.prefix, i + 1), diag=diag, plot_type='diag', n_subplots=int(n_list[i]), start_idx=bounds[i])
+                print('The plot of diagonal probability, diag_prob_time_%s_part%s.png, has been generated.' % (args.prefix, i + 1))
+
     print('Plotting the transition matrix as a heat map ...')
-    RA.plot_matrix(t_matrix, 'transition_matrix_%s.png' % args.prefix)
-    print('The heat map of the transition matrix, transition_matrix_%s.png, has been generated.\n' % args.prefix)
+    if RA.N_states <= 60:
+        RA.plot_matrix(t_matrix, 'transition_matrix_%s.png' % args.prefix)
+        print('The heat map of the transition matrix, transition_matrix_%s.png, has been generated.\n' % args.prefix)
+    else:
+        # Note that generally a transition matrix for a REMD simulation has a lot of zero elements
+        # so for a REMD with a larger number of states, we only plot the elements at the diagonal +- 7
+        # Therefore, n_fig * x - (n_fig - 1) * 7 = self.N_states  (x: n_replica, # of replicas to plot)
+        n_figs = int(np.ceil(RA.N_states / 36))
+        n_list = np.zeros(n_figs)
+        n_replicas = int(np.floor((RA.N_states + 7 * (n_figs - 1)) / n_figs))  # analogous to n_subplots when using plot_replica_data
+        y = (RA.N_states + 7 * (n_figs - 1)) - n_replicas * n_figs
+        x = n_figs - y
+        for i in range(x):
+            n_list[i] = n_replicas
+        for i in range(y):
+            n_list[i + 1] = n_replicas + 1
+        
+        low_bounds = [0]
+        # For example, for 126 states, n_list = np.array([46, 47, 47])
+        # nn_list = np.array([39, 40, 40])
+        # so low_bounds = [0, 39, 79], high_bounds = [46, 86, 126]
+        nn_list = n_list - 7
+        for i in range(n_figs - 1):
+            low_bounds.append(int(np.sum(nn_list[:i + 1])))
+        high_bounds = low_bounds + n_list
+
+        subdata = []
+        for i in range(n_figs):
+            subdata.append(np.zeros([int(n_list[i]), int(n_list[i])]))
+            for j in range(int(n_list[i])):
+                subdata[i][j] = t_matrix[j + low_bounds[i]][low_bounds[i]:int(high_bounds[i])]
+            RA.plot_matrix(subdata[i], 'transition_matrix_%s_part%s.png' % (args.prefix, i + 1), start_idx=low_bounds[i])
+            print('The heat map of the transition matrix, transition_matrix_%s_part%s.png, has been generated.\n' % (args.prefix, i + 1))
+
 
     print('Plotting the histogram of the diagonal transition probability ...')
     plt.figure()
