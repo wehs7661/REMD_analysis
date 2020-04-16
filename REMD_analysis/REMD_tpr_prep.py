@@ -90,7 +90,13 @@ module load gromacs/2018.3
 
 # export OMP_NUM_THREADS=24
 
-mpirun -np {N} gmx_mpi mdrun -deffnm {prefix} -dhdl {prefix}_dhdl.xvg -replex 100 -nex {N_cube} -multidir {job_dir}
+sbatch HREMD_run.sh -d=afterok:$SLURM_JOB_ID
+
+if [ -f state_0/{prefix}.cpt ]; then
+    mpirun -np {N} gmx_mpi mdrun -deffnm {prefix} -dhdl {prefix}_dhdl.xvg -replex 100 -nex {N_cube} -multidir {job_dir} -cpi {prefix}.cpt -noappend
+else
+    mpirun -np {N} gmx_mpi mdrun -deffnm {prefix} -dhdl {prefix}_dhdl.xvg -replex 100 -nex {N_cube} -multidir {job_dir}
+fi
             """.format(**job_dict)
             outfile = open('HREMD_run.sh', 'w')
             outfile.write(text)
@@ -114,7 +120,13 @@ module load gromacs/2018_cpu
 module load mpi/intel_mpi
 
 # export OMP_NUM_THREADS=24
-mpirun -np {N} gmx_mpi mdrun -deffnm {prefix} -dhdl {prefix}_dhdl.xvg -replex 100 -nex {N_cube} -multidir {job_dir}
+
+sbatch HREMD_run.sh -d=afterok:$SLURM_JOB_ID
+if [ -f state_0/{prefix}.cpt ]; then
+    mpirun -np {N} gmx_mpi mdrun -deffnm {prefix} -dhdl {prefix}_dhdl.xvg -replex 100 -nex {N_cube} -multidir {job_dir} -cpi {prefix}.cpt -noappend
+else
+    mpirun -np {N} gmx_mpi mdrun -deffnm {prefix} -dhdl {prefix}_dhdl.xvg -replex 100 -nex {N_cube} -multidir {job_dir}
+fi
             """.format(**job_dict)
             outfile = open('HREMD_run.sh', 'w')
             outfile.write(text)

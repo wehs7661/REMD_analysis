@@ -376,10 +376,12 @@ def main():
             # raised by gromacs
             os.system("mkdir state_%s" % i)
             if args.MPI:
+                print("Executing the command: gmx_mpi trjconv -f %sstate_%s/%s -s %sstate_%s/%s -o state_%s/%s.gro -dump %s" % (args.dir, s, args.trj[-1], args.dir, s, args.tpr[-1], i, args.prefix, extract_time))
                 p = os.popen("gmx_mpi trjconv -f %sstate_%s/%s -s %sstate_%s/%s -o state_%s/%s.gro -dump %s"
                             % (args.dir, s, args.trj[-1], args.dir, s, args.tpr[-1], i, args.prefix, extract_time), 'w')
                 p.write("0")   # 0: System
             if not args.MPI:
+                print("Executing the command: gmx trjconv -f %sstate_%s/%s -s %sstate_%s/%s -o state_%s/%s.gro -dump %s" % (args.dir, s, args.trj[-1], args.dir, s, args.tpr[-1], i, args.prefix, extract_time))
                 p = os.popen("gmx trjconv -f %sstate_%s/%s -s %sstate_%s/%s -o state_%s/%s.gro -dump %s"
                             % (args.dir, s, args.trj[-1], args.dir, s, args.tpr[-1], i, args.prefix, extract_time), 'w')
                 p.write("0")   # 0: System
