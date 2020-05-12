@@ -230,7 +230,7 @@ class REMDAnalysis(LogInfo):
         else:
             n_cols = int(np.floor(np.sqrt(n_subplots))) + 1
 
-        if self.N_states % n_cols == 0:
+        if n_subplots % n_cols == 0:
             n_rows = int(n_subplots / n_cols)
         else:
             n_rows = int(np.floor(n_subplots / n_cols)) + 1
@@ -299,7 +299,7 @@ class REMDAnalysis(LogInfo):
                 annot_matrix[i, j] = round(matrix[i, j], 2)
 
         x_tick_labels = y_tick_labels = np.arange(start_idx, start_idx + K)
-        ax = sns.heatmap(matrix, cmap="YlGnBu", linecolor='silver', linewidth=0.25, 
+        ax = sns.heatmap(matrix, cmap="YlGnBu", linecolor='silver', linewidth=0.25,
                         annot=annot_matrix, square=True, mask=mask, fmt='.2f', cbar=False, xticklabels=x_tick_labels, yticklabels=y_tick_labels)
         ax.xaxis.tick_top()
         ax.tick_params(length=0)
@@ -442,7 +442,7 @@ def main():
             for i in range(n_figs):
                 RA.plot_replica_data(time[1:], diag_prob[bounds[i]:bounds[i + 1]] * 100, 'diagprob_time_%s_part%s.png' % (args.prefix, i + 1), diag=diag, plot_type='diag', n_subplots=int(n_list[i]), start_idx=bounds[i])
                 print('The plot of diagonal probability, diag_prob_time_%s_part%s.png, has been generated.' % (args.prefix, i + 1))
-
+    
     print('Plotting the transition matrix as a heat map ...')
     if RA.N_states <= 60:
         RA.plot_matrix(t_matrix, 'transition_matrix_%s.png' % args.prefix)
@@ -456,10 +456,11 @@ def main():
         n_replicas = int(np.floor((RA.N_states + 7 * (n_figs - 1)) / n_figs))  # analogous to n_subplots when using plot_replica_data
         y = (RA.N_states + 7 * (n_figs - 1)) - n_replicas * n_figs
         x = n_figs - y
+
         for i in range(x):
             n_list[i] = n_replicas
-        for i in range(y):
-            n_list[i + 1] = n_replicas + 1
+        for i in range(x, x + y):
+            n_list[i] = n_replicas + 1
         
         low_bounds = [0]
         # For example, for 126 states, n_list = np.array([46, 47, 47])
