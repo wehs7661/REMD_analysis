@@ -49,7 +49,8 @@ setup(
         'console_scripts':[
             'REMD_analysis = REMD_analysis.REMD_analysis:main',
             'REMD_conf_prep = REMD_analysis.REMD_conf_prep:main',
-            'REMD_tpr_prep = REMD_analysis.REMD_tpr_prep:main'
+            'REMD_tpr_prep = REMD_analysis.REMD_tpr_prep:main',
+            'REMD_free_energy = REMD_analysis.REMD_free_energy:main'
             ],
     },
 

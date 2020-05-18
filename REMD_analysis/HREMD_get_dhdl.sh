@@ -1,5 +1,5 @@
 #!/bin/sh
-echo This shell script copy the *dhdl.xvg file from each folder to a newly made folder called dhdl_files and rename all the *dhdl.xvg files.
+echo This shell script copies the *dhdl.xvg file from each folder to a newly made folder called dhdl_files and rename all the *dhdl.xvg files.
 
 set -e     # exit upon error
 read -p "Please input the common prefix of the files: " p
@@ -16,7 +16,7 @@ do
 
     for (( j=2; j<$n+1; j=j+1 ))
     do
-        cp state_${i}/*${j}.xvg dhdl_files/${p}_dhdl_${i}_part${j}.xvg
+        cp state_${i}/*0${j}.xvg dhdl_files/${p}_dhdl_${i}_part${j}.xvg
     done
 done
 
