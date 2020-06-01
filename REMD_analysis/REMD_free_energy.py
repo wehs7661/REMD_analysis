@@ -5,8 +5,13 @@ import pickle
 import pymbar
 import natsort
 import argparse
+import time as time
+import numpy as np
 import pandas as pd
 import seaborn as sns
+import matplotlib.pyplot as plt
+from matplotlib import rc
+from matplotlib import cm
 from tqdm.auto import tqdm
 from alchemlyb.parsing.gmx import extract_dHdl, extract_u_nk
 from alchemlyb.preprocessing import equilibrium_detection
@@ -126,7 +131,7 @@ def free_energy_calculation(dHdl, u_nk):
     print("BAR: {} +/- {} kT".format(bar.delta_f_.iloc[0, -1], "unknown"))
     print("MBAR: {} +/- {} kT".format(mbar.delta_f_.iloc[0, -1], mbar.d_delta_f_.iloc[0, -1]))
 
-    return ti, bar, mbar
+    return ti, bar#, mbar
 
 def get_overlap_matrix(u_nk):
     # sort by state so that rows from same state are in contiguous blocks
@@ -174,7 +179,7 @@ def plot_matrix(matrix, png_name, start_idx=0):
     for _, spine in ax.spines.items():
         spine.set_visible(True)    # add frames to the heat map
     plt.annotate('$\lambda$', xy=(0, 0), xytext=(-0.45, -0.20))
-    plt.title('Transition matrix', fontsize=14, weight='bold')
+    plt.title('Overlap matrix', fontsize=14, weight='bold')
     plt.tight_layout(pad=1.0)
 
     plt.savefig(png_name, dpi=600)
@@ -183,6 +188,17 @@ def plot_matrix(matrix, png_name, start_idx=0):
 
 
 def main():
+
+    rc('font', **{
+        'family': 'sans-serif',
+        'sans-serif': ['DejaVu Sans'],
+        'size': 10
+    })
+    # Set the font used for MathJax - more on this later
+    rc('mathtext', **{'default': 'regular'})
+    plt.rc('font', family='serif')
+
+    t1 = time.time()
     args = initialize(sys.argv[1:])
 
     sys.stdout = open("Result.txt", "w")
@@ -199,18 +215,25 @@ def main():
             pickle.dump([dHdl, u_nk], handle, protocol=pickle.HIGHEST_PROTOCOL)
 
     print("\nPerforming free energy calculations ...")
-    ti, bar, mbar = free_energy_calculation(dHdl, u_nk)
+    ti, bar = free_energy_calculation(dHdl, u_nk)
 
     print("\nCalculating Wang-Landau weights for expanded ensemble using TI ...")
     WL_weights = ""
+    print(ti.delta_f_)
+    print(ti.delta_f_.iloc[0])
+    print(ti.delta_f_.iloc[0][0])
+    print(ti.delta_f_.iloc[0][1])
+    print(ti.delta_f_.iloc[0][2])
     for i in range(len(ti.delta_f_.iloc[0])):
+        print('i=%s' %i)
         WL_weights += (' ' + str(round(ti.delta_f_.iloc[0][i], 5)))
     print('Estimated Wang-Landau weights: %s' % WL_weights)
-
     print("\nComputing and visualizing the overlap matrix ...")
     # sys_name = 'PLCpep7'
-    matrix = get_overlap_matrix(u_nk)
-    plot_matrix(matrix, 'overlap_matrix.png')
+    #matrix = get_overlap_matrix(u_nk)
+    #plot_matrix(matrix, 'overlap_matrix.png')
+    t2 = time.time()
+    print("Time elapsed: %s seconds." % (t2 - t1))
 
     sys.stdout.close()
 
