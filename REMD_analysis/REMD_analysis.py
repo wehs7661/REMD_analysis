@@ -2,6 +2,7 @@ import os
 import sys
 import glob
 import pymbar
+import alchemlyb
 import time as timer
 import subprocess
 import argparse
