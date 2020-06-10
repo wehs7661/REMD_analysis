@@ -219,13 +219,14 @@ def main():
 
     print("\nCalculating Wang-Landau weights for expanded ensemble using TI ...")
     WL_weights = ""
+    """
     print(ti.delta_f_)
     print(ti.delta_f_.iloc[0])
     print(ti.delta_f_.iloc[0][0])
     print(ti.delta_f_.iloc[0][1])
     print(ti.delta_f_.iloc[0][2])
+    """
     for i in range(len(ti.delta_f_.iloc[0])):
-        print('i=%s' %i)
         WL_weights += (' ' + str(round(ti.delta_f_.iloc[0][i], 5)))
     print('Estimated Wang-Landau weights: %s' % WL_weights)
     print("\nComputing and visualizing the overlap matrix ...")
