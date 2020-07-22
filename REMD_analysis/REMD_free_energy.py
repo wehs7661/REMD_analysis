@@ -13,6 +13,7 @@ import matplotlib.pyplot as plt
 from matplotlib import rc
 from matplotlib import cm
 from tqdm.auto import tqdm
+from pymbar.timeseries import detectEquilibration
 from alchemlyb.parsing.gmx import extract_dHdl, extract_u_nk
 from alchemlyb.preprocessing import equilibrium_detection
 from alchemlyb.estimators import BAR, MBAR, TI
@@ -56,7 +57,7 @@ def preprocess_data(dir, temp, dt):
 
     if os.path.isfile('temporary.xvg') is True:
         os.system("rm temporary.xvg")
-    files = glob.glob(os.path.join(dir, '*.xvg*'))
+    files = glob.glob(os.path.join(dir, '*dhdl.xvg*'))
     files = natsort.natsorted(files, reverse=False)
 
     file_idx = -1  
@@ -102,19 +103,24 @@ def preprocess_data(dir, temp, dt):
     u_nk_data = pd.concat(u_nk_state)
 
     dHdl.append(equilibrium_detection(dHdl_data, dHdl_data.iloc[:, 0]))
-    print('Subsampling dHdl data of the %s state ...' % ordinal(n_state))
-
+    print(f'Subsampling dHdl data of the {ordinal(n_state)} state ...')
+    _, g1, _ = detectEquilibration(dHdl_data.iloc[:, 0].values)
+    
     u_nk.append(equilibrium_detection(u_nk_data, u_nk_data.iloc[:, 0]))
-    print('Subsampling u_nk data of the %s state ...\n' % ordinal(n_state))
+    print(f'Subsampling u_nk data of the {ordinal(n_state)} state ...\n')
+    t2, g2, N2 = detectEquilibration(u_nk_data.iloc[:, 0].values)
 
     dHdl = pd.concat(dHdl)
     u_nk = pd.concat(u_nk)
+
+    setattr(dHdl, 'statineff', g1)
+    setattr(u_nk, 'statineff', g2)
+
     print("Data preprocessing completed!\n")
     
     os.system("rm temporary.xvg")
 
     return dHdl, u_nk
-
 
 def free_energy_calculation(dHdl, u_nk):
     print("Fitting TI on dHdl ...")
@@ -123,13 +129,25 @@ def free_energy_calculation(dHdl, u_nk):
     print("Fitting BAR on u_nk ...")
     bar = BAR().fit(u_nk)
 
-    print("Fitting MBAR on u_nk ...")
-    mbar = MBAR().fit(u_nk)
+    print("Fitting MBAR on u_nk ...\n")
+    try:
+        mbar_stop = False
+        mbar = MBAR().fit(u_nk)
+    except pymbar.utils.ParameterError:
+        mbar_stop = True
+        print("\sum_n W_nk is not equal to 1, probably due to insufficient overlap between states.")
+        print("Stop using MBAR ...")
+    
 
     print("====== Results ======")
+    if hasattr(dHdl, 'statineff') is True:
+        print(f'Statistical inefficiency of dHdl: {dHdl.statineff}')
+    if hasattr(u_nk, 'statineff') is True:
+        print(f'Statistical inefficiency of u_nk: {u_nk.statineff}\n')
     print("TI: {} +/- {} kT".format(ti.delta_f_.iloc[0, -1], ti.d_delta_f_.iloc[0, -1]))
     print("BAR: {} +/- {} kT".format(bar.delta_f_.iloc[0, -1], "unknown"))
-    print("MBAR: {} +/- {} kT".format(mbar.delta_f_.iloc[0, -1], mbar.d_delta_f_.iloc[0, -1]))
+    if mbar_stop is False:
+        print("MBAR: {} +/- {} kT".format(mbar.delta_f_.iloc[0, -1], mbar.d_delta_f_.iloc[0, -1]))
 
     return ti, bar#, mbar
 
@@ -179,11 +197,11 @@ def plot_matrix(matrix, png_name, start_idx=0):
     for _, spine in ax.spines.items():
         spine.set_visible(True)    # add frames to the heat map
     plt.annotate('$\lambda$', xy=(0, 0), xytext=(-0.45, -0.20))
-    plt.title('Overlap matrix', fontsize=14, weight='bold')
+    plt.title('Overlap matrix', fontsize=10, weight='bold')
     plt.tight_layout(pad=1.0)
 
     plt.savefig(png_name, dpi=600)
-    # plt.show()
+    #plt.show()
     plt.close()
 
 
@@ -192,7 +210,7 @@ def main():
     rc('font', **{
         'family': 'sans-serif',
         'sans-serif': ['DejaVu Sans'],
-        'size': 10
+        'size': 6
     })
     # Set the font used for MathJax - more on this later
     rc('mathtext', **{'default': 'regular'})
@@ -226,13 +244,13 @@ def main():
     print(ti.delta_f_.iloc[0][1])
     print(ti.delta_f_.iloc[0][2])
     """
-    for i in range(len(ti.delta_f_.iloc[0])):
-        WL_weights += (' ' + str(round(ti.delta_f_.iloc[0][i], 5)))
-    print('Estimated Wang-Landau weights: %s' % WL_weights)
+    #for i in range(len(ti.delta_f_.iloc[0])):
+    #    WL_weights += (' ' + str(round(ti.delta_f_.iloc[0][i], 5)))
+    #print('Estimated Wang-Landau weights: %s' % WL_weights)
     print("\nComputing and visualizing the overlap matrix ...")
     # sys_name = 'PLCpep7'
-    #matrix = get_overlap_matrix(u_nk)
-    #plot_matrix(matrix, 'overlap_matrix.png')
+    matrix = get_overlap_matrix(u_nk)
+    plot_matrix(matrix, 'overlap_matrix.png')
     t2 = time.time()
     print("Time elapsed: %s seconds." % (t2 - t1))
 
