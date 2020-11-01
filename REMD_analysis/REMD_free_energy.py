@@ -30,7 +30,7 @@ def initialize(args):
                         type=str,
                         default='.',
                         help='The directory where the dhdl files are.')
-    parser.add_argument('-t',
+    parser.add_argument('-T',
                         '--temp',
                         type=float,
                         default=298.15,
@@ -44,7 +44,10 @@ def initialize(args):
                         '--spacing',
                         type=float,
                         help='The spacing in time (ns) to plot the free energy estimate as a function of time.')
-                        
+    parser.add_argument('-t',
+                        '--time',
+                        type=float,
+                        help='The length of the simulation to be considered.')
     args_parse = parser.parse_args(args)
 
     return args_parse
@@ -57,7 +60,7 @@ class Preprocessing():
     def __init__(self):
         pass
 
-    def extract_data(self, dir, temp, dt):
+    def extract_data(self, dir, temp, dt, time=None):
         # extract and subsample dHdl using equilibrium_detection
         dHdl_state = []  # dHdl_state is for collecting data for a single state
         u_nk_state = []  # u_nk_state is for collecting data fro a single state
@@ -76,9 +79,13 @@ class Preprocessing():
             file_idx += 1 
             logger(f"Parsing {files[file_idx]} and collecting data ...")
             os.system(f"head -n-1 {i} > temporary.xvg")  # delete the last line in case it is incomplete
-            dHdl_state.append(extract_dHdl('temporary.xvg', T=temp))
-            u_nk_state.append(extract_u_nk('temporary.xvg', T=temp))
-
+            if time is not None:
+                dHdl_state.append(extract_dHdl('temporary.xvg', T=temp).loc[:time])
+                u_nk_state.append(extract_u_nk('temporary.xvg', T=temp).loc[:time])
+            else:
+                dHdl_state.append(extract_dHdl('temporary.xvg', T=temp))
+                u_nk_state.append(extract_u_nk('temporary.xvg', T=temp))
+            
             if n > 1:  # for discard the overlapped time frames of the previous file
                 upper_t = dHdl_state[-2].iloc[dHdl_state[-2].shape[0] - 1].name[0]   # the last time frame of file n
                 lower_t = dHdl_state[-1].iloc[0].name[0]   # the first time frame of file n + 1 
@@ -185,6 +192,7 @@ def free_energy_calculation(dHdl, u_nk):
     bar = BAR().fit(u_nk)
 
     logger("Fitting MBAR on u_nk ...\n")
+    
     try:
         mbar_stop = False
         mbar = MBAR().fit(u_nk)
@@ -246,7 +254,7 @@ def plot_matrix(matrix, png_name, start_idx=0):
 
     x_tick_labels = y_tick_labels = np.arange(start_idx, start_idx + K)
     ax = sns.heatmap(matrix, cmap="YlGnBu", linecolor='silver', linewidth=0.25,
-                    annot=annot_matrix, square=True, mask=mask, fmt='.2f', cbar=False, xticklabels=x_tick_labels, yticklabels=y_tick_labels)
+                    annot=annot_matrix, square=True, mask=matrix<0.005, fmt='.2f', cbar=False, xticklabels=x_tick_labels, yticklabels=y_tick_labels)
     ax.xaxis.tick_top()
     ax.tick_params(length=0)
     cmap = cm.get_cmap('YlGnBu')   # to get the facecolor
@@ -289,12 +297,13 @@ def main():
     else:
         logger('Preprocessing the data in the dhdl files ...')
         preprocessing = Preprocessing()
-        dHdl_data, u_nk_data = preprocessing.extract_data(args.dir, args.temp, dt=args.dt)    
+        dHdl_data, u_nk_data = preprocessing.extract_data(args.dir, args.temp, dt=args.dt, time=args.time)    
         dHdl, u_nk = preprocessing.decorrelate_data(dHdl_data, u_nk_data)
         with open('alchemical_analysis.pickle', 'wb') as handle:
             pickle.dump([dHdl, u_nk], handle, protocol=pickle.HIGHEST_PROTOCOL)
 
     logger("\nPerforming free energy calculations on the whole dataset ...")
+    
     output = free_energy_calculation(dHdl, u_nk)  # output[0] = ti, output[1] = bar, output[2] = mbar (if any)
     
     if args.spacing is not None:
@@ -329,7 +338,7 @@ def main():
         # plt.show()
         plt.savefig("uncertainty_evolution.png", dpi=600)
 
-    logger("Calculating Wang-Landau weights for expanded ensemble using TI ...")
+    logger("Calculating Wang-Landau weights for expanded ensemble using MBAR ...")
     WL_weights = ""
     """
     logger(ti.delta_f_)
@@ -337,12 +346,15 @@ def main():
     logger(ti.delta_f_.iloc[0][0])
     logger(ti.delta_f_.iloc[0][1])
     logger(ti.delta_f_.iloc[0][2])
+    
+    
+    for i in range(len(output[1].delta_f_.iloc[0])):
+        WL_weights += (' ' + str(round(output[1].delta_f_.iloc[0][i], 5)))
+    logger('Estimated Wang-Landau weights by BAR: %s' % WL_weights)
     """
-    #for i in range(len(ti.delta_f_.iloc[0])):
-    #    WL_weights += (' ' + str(round(ti.delta_f_.iloc[0][i], 5)))
-    #logger('Estimated Wang-Landau weights: %s' % WL_weights)
     logger("\nComputing and visualizing the overlap matrix ...")
     matrix = get_overlap_matrix(u_nk)
+    #print(matrix)
     plot_matrix(matrix, 'overlap_matrix.png')
     t2 = time.time()
     logger(f"Time elapsed: {t2 - t1} seconds.")

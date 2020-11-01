@@ -301,7 +301,7 @@ class REMDAnalysis(LogInfo):
 
         x_tick_labels = y_tick_labels = np.arange(start_idx, start_idx + K)
         ax = sns.heatmap(matrix, cmap="YlGnBu", linecolor='silver', linewidth=0.25,
-                        annot=annot_matrix, square=True, mask=mask, fmt='.2f', cbar=False, xticklabels=x_tick_labels, yticklabels=y_tick_labels)
+                        annot=annot_matrix, square=True, mask=matrix < 0.005, fmt='.2f', cbar=False, xticklabels=x_tick_labels, yticklabels=y_tick_labels)
         ax.xaxis.tick_top()
         ax.tick_params(length=0)
         cmap = cm.get_cmap('YlGnBu')   # to get the facecolor
