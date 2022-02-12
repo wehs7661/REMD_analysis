@@ -18,6 +18,9 @@ from alchemlyb.parsing.gmx import extract_dHdl, extract_u_nk
 from alchemlyb.preprocessing import equilibrium_detection
 from alchemlyb.estimators import BAR, MBAR, TI
 
+import alchemlyb
+print(alchemlyb.__path__)
+print(alchemlyb.__version__)
 
 def initialize(args):
     parser = argparse.ArgumentParser(
@@ -171,6 +174,7 @@ def free_energy_evolution(u_nk_data, spacing):
         u_nk_subset = pd.concat(u_nk_subset)
         
         # Then, we do free energy calculation on the subset using MBAR
+        
         try: 
             mbar_stop = False
             mbar = MBAR().fit(u_nk_subset)   
@@ -178,7 +182,6 @@ def free_energy_evolution(u_nk_data, spacing):
             mbar_stop = True
             logger("\sum_n W_nk is not equal to 1, probably due to insufficient overlap between states.")
             logger("Stop using MBAR ...")
-
         f.append(mbar.delta_f_.iloc[0, -1])
         std.append(mbar.d_delta_f_.iloc[0, -1])
 
@@ -192,6 +195,7 @@ def free_energy_calculation(dHdl, u_nk):
     bar = BAR().fit(u_nk)
 
     logger("Fitting MBAR on u_nk ...\n")
+    # mbar = MBAR().fit(u_nk)
     
     try:
         mbar_stop = False
@@ -208,6 +212,7 @@ def free_energy_calculation(dHdl, u_nk):
         logger(f'Statistical inefficiency of u_nk: {u_nk.statineff}\n')
     logger(f"TI: {ti.delta_f_.iloc[0, -1]} +/- {ti.d_delta_f_.iloc[0, -1]} kT")
     logger(f"BAR: {bar.delta_f_.iloc[0, -1]} +/- unknown kT")
+    # mbar_stop = False
     if mbar_stop is False:
         logger(f"MBAR: {mbar.delta_f_.iloc[0, -1]} +/- {mbar.d_delta_f_.iloc[0, -1]} kT")
         logger("------------------------------------------------")
