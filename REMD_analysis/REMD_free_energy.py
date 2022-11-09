@@ -70,7 +70,7 @@ class Preprocessing():
 
         if os.path.isfile('temporary.xvg') is True:
             os.system("rm temporary.xvg")
-        files = glob.glob(os.path.join(dir, '*dhdl.xvg*'))
+        files = glob.glob(os.path.join(dir, '*dhdl*.xvg*'))
         files = natsort.natsorted(files, reverse=False)
 
         file_idx = -1  
@@ -93,6 +93,9 @@ class Preprocessing():
                 upper_t = dHdl_state[-2].iloc[dHdl_state[-2].shape[0] - 1].name[0]   # the last time frame of file n
                 lower_t = dHdl_state[-1].iloc[0].name[0]   # the first time frame of file n + 1 
                 # upper_t and lower_t should be the same for both dHdl and u_nk
+
+                print(lower_t)
+                print(upper_t)
 
                 if lower_t != 0:   # in case that the file n+1 is the first file of the next replica
                     n_discard = int((upper_t - lower_t) / dt + 1)   # number of data frames to discard in file n
@@ -352,12 +355,12 @@ def main():
     logger(ti.delta_f_.iloc[0][1])
     logger(ti.delta_f_.iloc[0][2])
     
-    
     for i in range(len(output[1].delta_f_.iloc[0])):
         WL_weights += (' ' + str(round(output[1].delta_f_.iloc[0][i], 5)))
     logger('Estimated Wang-Landau weights by BAR: %s' % WL_weights)
     """
     logger("\nComputing and visualizing the overlap matrix ...")
+
     matrix = get_overlap_matrix(u_nk)
     #print(matrix)
     plot_matrix(matrix, 'overlap_matrix.png')
