@@ -15,10 +15,10 @@ import matplotlib.pyplot as plt
 from matplotlib import rc
 from matplotlib import cm
 from rich.progress import track
-from pymbar.timeseries import statisticalInefficiency
+from pymbar.timeseries import statistical_inefficiency
 from alchemlyb.parsing.gmx import extract_u_nk, extract_dHdl
 from alchemlyb.preprocessing.subsampling import equilibrium_detection
-from alchemlyb.estimators import TI, BAR, AutoMBAR
+from alchemlyb.estimators import TI, BAR, MBAR
 
 def initialize(args):
     parser = argparse.ArgumentParser(
@@ -83,29 +83,38 @@ def preprocess_data(folders, temp, spacing, bounds=[None, None]):
         files = glob.glob(os.path.join(folders[i], '*dhdl*xvg*'))
         files = natsort.natsorted(files, reverse=False)
 
-        logger(f'Collecting data for the following files: {", ".join(files)}')
+        print(f'  Collecting data for the following files: {", ".join(files)}')
+        print('  Subsampling the dHdl and u_nk data ...')
         dHdl = alchemlyb.concat([extract_dHdl(xvg, T=temp) for xvg in files])
-        dHdl = dHdl.loc[~dHdl.index.duplicated(keep='last')]
+        dHdl_series = subsampling.dhdl2series(dHdl)
+        dHdl, dHdl_series = subsampling._prepare_input(dHdl, dHdl_series, drop_duplicates=True, sort=True)
+        dHdl = subsampling.slicing(dHdl, lower=bounds[0], upper=bounds[1], step=spacing)
+        dHdl_series = subsampling.slicing(dHdl_series, lower=bounds[0], upper=bounds[1], step=spacing)
+        t, statinef, Neff_max = detect_equilibration(dHdl_series.values)
+        print(f'    Adopted spacing: {spacing: .0f}')
+        print(f'   {t / len(dHdl_series) * 100: .1f}% of the dHdl data was in the equilibrium region and therfore discarded.')
+        print(f'    Statistical inefficiency of dHdl: {statinef: .1f}')
+        print(f'    Number of effective samples: {Neff_max}')
+        dHdl_series_equil, dHdl_equil = dHdl_series[t:], dHdl[t:]
+        indices = subsample_correlated_data(dHdl_series_equil, g=statinef)
+        preprocessed_dHdl = dHdl_equil.iloc[indices]
 
         u_nk = alchemlyb.concat([extract_u_nk(xvg, T=temp) for xvg in files])
-        u_nk = u_nk.loc[~u_nk.index.duplicated(keep='last')]
+        u_nk_series = subsampling.u_nk2series(u_nk)
+        u_nk, u_nk_series = subsampling._prepare_input(u_nk, u_nk_series, drop_duplicates=True, sort=True)
+        u_nk = subsampling.slicing(u_nk, lower=bounds[0], upper=bounds[1], step=spacing)
+        u_nk_series = subsampling.slicing(u_nk_series, lower=bounds[0], upper=bounds[1], step=spacing)
+        t, statinef, Neff_max = detect_equilibration(u_nk_series.values)
+        print(f'    Adopted spacing: {spacing: .0f}')
+        print(f'   {t / len(u_nk_series) * 100: .1f}% of the dHdl data was in the equilibrium region and therfore discarded.')
+        print(f'    Statistical inefficiency of dHdl: {statinef: .1f}')
+        print(f'    Number of effective samples: {Neff_max}')
+        u_nk_series_equil, u_nk_equil = u_nk_series[t:], u_nk[t:]
+        indices = subsample_correlated_data(u_nk_series_equil, g=statinef)
+        preprocessed_u_nk = u_nk_equil.iloc[indices]
 
-        logger('Subsampling the dHdl and u_nk data ...')
-        
-        # Step 1: Use the first column for equilibration detection
-        truncated_dHdl = equilibrium_detection(dHdl, dHdl.iloc[:, 0], lower=bounds[0], upper=bounds[1], step=spacing)
-        truncated_u_nk = equilibrium_detection(u_nk, u_nk.iloc[:, 0], lower=bounds[0], upper=bounds[1], step=spacing)
-
-        # Step 2: Subsample with statistical inefficiency calculated from the first column
-        g_1 = statisticalInefficiency(dHdl.iloc[:, 0])
-        g_2 = statisticalInefficiency(u_nk.iloc[:, 0])
-        decorrelated_dHdl = truncated_dHdl[::math.ceil(g_1)]
-        decorrelated_u_nk = truncated_u_nk[::math.ceil(g_2)]
-        logger(f'Statistical inefficiency of dHdl: {g_1:.3f} (adjusted to {math.ceil(g_1)}) ==> {len(decorrelated_dHdl)} effective samples.')
-        logger(f'Statistical inefficiency of u_nk: {g_2:.3f} (adjusted to {math.ceil(g_2)}) ==> {len(decorrelated_u_nk)} effective samples.')
-
-        dHdl_data.append(decorrelated_dHdl)
-        u_nk_data.append(decorrelated_u_nk)
+        dHdl_data.append(preprocessed_dHdl)
+        u_nk_data.append(preprocessed_u_nk)
     
     # Finally, concatenate dHdl/u_nk data from different replicas as needed
     dHdl_data = alchemlyb.concat(dHdl_data)
@@ -127,7 +136,7 @@ def free_energy_calculation(dHdl, u_nk):
     logger('Fitting MBAR on u_nk ...\n')
     try:
         mbar_stop = False
-        mbar = AutoMBAR().fit(u_nk)
+        mbar = MBAR().fit(u_nk)
     except pymbar.utils.ParameterError():
         mbar_stop = True
         logger("\sum_n W_nk is not equal to 1, probably due to insufficient overlap between states.")
