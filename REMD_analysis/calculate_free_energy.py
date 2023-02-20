@@ -162,7 +162,7 @@ def get_overlap_matrix(u_nk):
     N_k = [(len(groups.get_group(i)) if i in groups.groups else 0) for i in u_nk.columns]        
 
     MBAR = pymbar.mbar.MBAR(u_nk.T, N_k)
-    overlap_matrix = np.array(MBAR.computeOverlap()['matrix'])
+    overlap_matrix = np.array(MBAR.compute_overlap()['matrix'])
 
     return overlap_matrix
 
